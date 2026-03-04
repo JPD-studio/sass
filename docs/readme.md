@@ -186,74 +186,82 @@ pytest tests/ -v
 
 ## 5. データストリーミングアーキテクチャ
 
-SASS はセンサーからブラウザまでの **エンドツーエンドのリアルタイム点群パイプライン** を設計しています。
-Python バックエンドと TypeScript フロントエンドが WebSocket で接続されます。
+SASS はセンサーからブラウザまでの **エンドツーエンドのリアルタイム点群パイプライン** を実装しています。
+Python バックエンドと TypeScript フロントエンドが WebSocket で接続され、
+`voxel/` の後でパイプラインが **ビューワー系** と **検知系** の 2 本に分岐します。
 
 ### 5.1 全体データフロー
 
+```mermaid
+flowchart TD
+  subgraph Python["Python バックエンド (cepf_sdk/)"]
+    A["センサー (UDP)"]
+    B["drivers/\nバイナリパケット解析"]
+    C["parsers/\nCepfFrame 変換"]
+    D["usc.py\n複数センサー統合・forge()"]
+    E["filters/\n点群フィルタリング"]
+    F["transport/\nWebSocket サーバー (asyncio)"]
+    A -->|生パケット bytes| B
+    B --> C
+    C --> D
+    D --> E
+    E --> F
+  end
+
+  F -->|"WebSocket\nJSON / CEPF バイナリ"| G
+
+  subgraph TS["TypeScript フロントエンド"]
+    G["ws-client/\nWebSocket 受信・PointStream"]
+    H["voxel/\nVoxelGrid・BackgroundVoxelMap\nVoxelDiff・SpatialId変換"]
+    G --> H
+
+    H -->|ビューワーパイプライン| I["viewer/\nThree.js InstancedMesh\n3D リアルタイム可視化"]
+    H -->|検知パイプライン| J["detector/\nAdaptiveStddev 閾値判定\n侵入イベント生成"]
+    J --> K["mqtt-client\n(将来実装)\nヘッドレス通知"]
+  end
+
+  subgraph Apps["apps_ts/ エントリーポイント"]
+    L["main-viewer.ts\nブラウザ起動"]
+    M["main-detector.ts\nヘッドレス起動"]
+  end
+
+  I --> L
+  J --> M
 ```
-【Python バックエンド】
 
-センサー (UDP)
-    │  生パケット (bytes)
-    ▼
-cepf_sdk/drivers/       ← バイナリパケット解析（センサー固有ロジック）
-    │
-    ▼
-cepf_sdk/parsers/       ← CepfFrame 変換（センサー差異を吸収）
-    │
-    ▼
-cepf_sdk/usc.py         ← 複数センサー統合管理・forge()
-    │
-    ▼
-cepf_sdk/filters/       ← 点群フィルタリング（領域カット・統計・分類）
-    │
-    ▼
-cepf_sdk/transport/     ← WebSocket サーバー (asyncio) + HTTP 静的配信
-    │
-    │  WebSocket（JSON または CEPF バイナリ）
-    ▼
-【TypeScript フロントエンド】
-
-ws-client/              ← WebSocket 受信・点群ストリーム管理
-    │
-    ▼
-voxel/                  ← ボクセル化・フレーム差分 (VoxelDiff)・空間ID変換
-    │
-    ▼
-viewer/                 ← Three.js 3D 可視化（InstancedMesh 高速描画）
-
-（apps_ts/ が各コンポーネントの設定読み込みと配線を担う）
-```
-
-### 5.2 transport/ レイヤー（Python 側・計画中）
+### 5.2 transport/ レイヤー（Python 側）
 
 `cepf_sdk/transport/` は、フィルタリング済み `CepfFrame` をネットワーク経由で送信する配信レイヤーです。
 
 | モジュール | 役割 | 状態 |
 |----------|------|:----:|
-| `transport/base.py` | TransportBase 抽象基底クラス | 🔲 計画中 |
-| `transport/websocket.py` | asyncio WebSocket サーバー | 🔲 計画中 |
-| `transport/http_server.py` | 静的ファイル配信（viewer HTML/JS） | 🔲 計画中 |
+| `transport/base.py` | TransportBase 抽象基底クラス | ✅ 実装済み |
+| `transport/websocket.py` | asyncio WebSocket サーバー | ✅ 実装済み |
+| `transport/http_server.py` | 静的ファイル配信（viewer HTML/JS） | ✅ 実装済み |
 
-**接続形式（予定）:** Python apps/ → USC → FilterPipeline → transport.ws_server → push → TypeScript
+**接続形式:** Python apps/ → USC → FilterPipeline → transport.ws_server → push → TypeScript
 
-### 5.3 TypeScript コンポーネント（フロントエンド側・計画中）
+### 5.3 TypeScript コンポーネント（フロントエンド側）
 
 | コンポーネント | 役割 | 状態 |
 |-------------|------|:----:|
-| `ws-client/` | WebSocket 受信・点群ストリーム抽象化 | 🔲 計画中 |
-| `voxel/` | VoxelGrid・VoxelDiff・空間ID変換 | 🔲 計画中 |
-| `viewer/` | Three.js シーン・InstancedMesh 大量点描画 | 🔲 計画中 |
-| `apps_ts/` | フロントエンド配線・センサー設定読み込み | 🔲 計画中 |
+| `ws-client/` | WebSocket 受信・点群ストリーム抽象化 | ✅ 実装済み |
+| `voxel/` | VoxelGrid・VoxelDiff・空間ID変換 | ✅ 実装済み |
+| `detector/` | 閾値ストラテジー・侵入検知エンジン | ✅ 実装済み |
+| `viewer/` | Three.js シーン・InstancedMesh 大量点描画 | ✅ 実装済み |
+| `apps_ts/` | フロントエンド配線・センサー設定読み込み | ✅ 実装済み |
 | `vendor/` | 空間ID TS ライブラリ（変更禁止） | ✅ 組み込み済み |
 
 **voxel/ の役割:**
-点群を 3D グリッドセル（ボクセル）に分割し、フレーム間の差分 (VoxelDiff) だけを送信することで通信帯域を削減します。
-空間ID変換は `vendor/` の外部ライブラリを使用します。
+点群を 3D グリッドセル（ボクセル）に分割し、背景学習（指数移動平均）と差分計算を行います。
+空間ID変換は `vendor/` の外部ライブラリを利用します（現在スタブ）。
+
+**detector/ の役割:**
+`VoxelDiffEntry` を受け取り、静的・適応的平均・適応的標準偏差の 3 種類の閾値ストラテジーで侵入判定を行います。
+ストラテジーパターンで実行時に切り替え可能です。
 
 **viewer/ の役割:**
-Three.js の `InstancedMesh` を活用し、数万〜数十万点の点群をブラウザ上でリアルタイムに高速描画します。
+Three.js の `InstancedMesh` を活用し、最大 100,000 ボクセルをブラウザ上でリアルタイムに高速描画します。
 
 ### 5.4 実装状況サマリー
 
@@ -263,10 +271,11 @@ Three.js の `InstancedMesh` を活用し、数万〜数十万点の点群をブ
 | `parsers/` | ✅ 実装済み（Continental はスタブ） |
 | `usc.py` | ✅ 実装済み |
 | `filters/` | ✅ 実装済み |
-| `transport/` | 🔲 計画中 |
-| `ws-client/` | 🔲 計画中 |
-| `voxel/` | 🔲 計画中 |
-| `viewer/` | 🔲 計画中 |
+| `transport/` | ✅ 実装済み |
+| `ws-client/` | ✅ 実装済み |
+| `voxel/` | ✅ 実装済み |
+| `detector/` | ✅ 実装済み |
+| `viewer/` | ✅ 実装済み |
 
 ---
 
