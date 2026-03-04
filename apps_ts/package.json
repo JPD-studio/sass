@@ -1,0 +1,14 @@
+{
+  "name": "apps_ts",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "viewer": "node --loader ts-node/esm src/main-viewer.ts",
+    "detector": "node --loader ts-node/esm src/main-detector.ts"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "@types/node": "^20.0.0"
+  }
+}
