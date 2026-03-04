@@ -13,12 +13,13 @@
 2. [リポジトリ構成](#2-リポジトリ構成)
 3. [セットアップ](#3-セットアップ)
 4. [アーキテクチャ](#4-アーキテクチャ)
-5. [主要コンセプト](#5-主要コンセプト)
-6. [対応センサー](#6-対応センサー)
-7. [使用例](#7-使用例)
-8. [フィルター体系](#8-フィルター体系)
-9. [開発ガイド](#9-開発ガイド)
-10. [ドキュメント一覧](#10-ドキュメント一覧)
+5. [データストリーミングアーキテクチャ](#5-データストリーミングアーキテクチャ)
+6. [主要コンセプト](#6-主要コンセプト)
+7. [対応センサー](#7-対応センサー)
+8. [使用例](#8-使用例)
+9. [フィルター体系](#9-フィルター体系)
+10. [開発ガイド](#10-開発ガイド)
+11. [ドキュメント一覧](#11-ドキュメント一覧)
 
 ---
 
@@ -183,7 +184,93 @@ pytest tests/ -v
 
 ---
 
-## 5. 主要コンセプト
+## 5. データストリーミングアーキテクチャ
+
+SASS はセンサーからブラウザまでの **エンドツーエンドのリアルタイム点群パイプライン** を設計しています。
+Python バックエンドと TypeScript フロントエンドが WebSocket で接続されます。
+
+### 5.1 全体データフロー
+
+```
+【Python バックエンド】
+
+センサー (UDP)
+    │  生パケット (bytes)
+    ▼
+cepf_sdk/drivers/       ← バイナリパケット解析（センサー固有ロジック）
+    │
+    ▼
+cepf_sdk/parsers/       ← CepfFrame 変換（センサー差異を吸収）
+    │
+    ▼
+cepf_sdk/usc.py         ← 複数センサー統合管理・forge()
+    │
+    ▼
+cepf_sdk/filters/       ← 点群フィルタリング（領域カット・統計・分類）
+    │
+    ▼
+cepf_sdk/transport/     ← WebSocket サーバー (asyncio) + HTTP 静的配信
+    │
+    │  WebSocket（JSON または CEPF バイナリ）
+    ▼
+【TypeScript フロントエンド】
+
+ws-client/              ← WebSocket 受信・点群ストリーム管理
+    │
+    ▼
+voxel/                  ← ボクセル化・フレーム差分 (VoxelDiff)・空間ID変換
+    │
+    ▼
+viewer/                 ← Three.js 3D 可視化（InstancedMesh 高速描画）
+
+（apps_ts/ が各コンポーネントの設定読み込みと配線を担う）
+```
+
+### 5.2 transport/ レイヤー（Python 側・計画中）
+
+`cepf_sdk/transport/` は、フィルタリング済み `CepfFrame` をネットワーク経由で送信する配信レイヤーです。
+
+| モジュール | 役割 | 状態 |
+|----------|------|:----:|
+| `transport/base.py` | TransportBase 抽象基底クラス | 🔲 計画中 |
+| `transport/websocket.py` | asyncio WebSocket サーバー | 🔲 計画中 |
+| `transport/http_server.py` | 静的ファイル配信（viewer HTML/JS） | 🔲 計画中 |
+
+**接続形式（予定）:** Python apps/ → USC → FilterPipeline → transport.ws_server → push → TypeScript
+
+### 5.3 TypeScript コンポーネント（フロントエンド側・計画中）
+
+| コンポーネント | 役割 | 状態 |
+|-------------|------|:----:|
+| `ws-client/` | WebSocket 受信・点群ストリーム抽象化 | 🔲 計画中 |
+| `voxel/` | VoxelGrid・VoxelDiff・空間ID変換 | 🔲 計画中 |
+| `viewer/` | Three.js シーン・InstancedMesh 大量点描画 | 🔲 計画中 |
+| `apps_ts/` | フロントエンド配線・センサー設定読み込み | 🔲 計画中 |
+| `vendor/` | 空間ID TS ライブラリ（変更禁止） | ✅ 組み込み済み |
+
+**voxel/ の役割:**
+点群を 3D グリッドセル（ボクセル）に分割し、フレーム間の差分 (VoxelDiff) だけを送信することで通信帯域を削減します。
+空間ID変換は `vendor/` の外部ライブラリを使用します。
+
+**viewer/ の役割:**
+Three.js の `InstancedMesh` を活用し、数万〜数十万点の点群をブラウザ上でリアルタイムに高速描画します。
+
+### 5.4 実装状況サマリー
+
+| レイヤー | 状態 |
+|---------|:----:|
+| `drivers/` | ✅ 実装済み |
+| `parsers/` | ✅ 実装済み（Continental はスタブ） |
+| `usc.py` | ✅ 実装済み |
+| `filters/` | ✅ 実装済み |
+| `transport/` | 🔲 計画中 |
+| `ws-client/` | 🔲 計画中 |
+| `voxel/` | 🔲 計画中 |
+| `viewer/` | 🔲 計画中 |
+
+---
+
+## 6. 主要コンセプト
 
 ### CepfFrame
 
@@ -227,7 +314,7 @@ frame.transform_points(transform)
 
 ---
 
-## 6. 対応センサー
+## 7. 対応センサー
 
 | メーカー | モデル | 種別 | パーサー名 | 状態 |
 |---------|--------|------|-----------|:----:|
@@ -239,7 +326,7 @@ frame.transform_points(transform)
 
 ---
 
-## 7. 使用例
+## 8. 使用例
 
 ### 基本的な変換フロー
 
@@ -314,16 +401,16 @@ filtered = pipeline.run(frame)
 
 ---
 
-## 8. フィルター体系
+## 9. フィルター体系
 
-### 8.1 FilterMode
+### 9.1 FilterMode
 
 | モード | 動作 |
 |--------|------|
 | `MASK` | 条件外の点を除去した新フレームを返す |
 | `FLAG` | 条件に合う点にビットフラグを付与する |
 
-### 8.2 フィルター一覧
+### 9.2 フィルター一覧
 
 | カテゴリ | クラス | 主なパラメータ |
 |---------|--------|-------------|
@@ -342,9 +429,9 @@ filtered = pipeline.run(frame)
 
 ---
 
-## 9. 開発ガイド
+## 10. 開発ガイド
 
-### 9.1 テスト実行
+### 10.1 テスト実行
 
 ```bash
 cd /home/jetson/repos/sass
@@ -352,7 +439,7 @@ cd /home/jetson/repos/sass
 ~/.local/bin/pytest tests/test_parsers/ -v   # パーサーのみ
 ```
 
-### 9.2 新しいパーサーを追加する手順
+### 10.2 新しいパーサーを追加する手順
 
 1. **`cepf_sdk/parsers/your_sensor.py`** を作成
 
@@ -382,7 +469,7 @@ _PARSER_MAP = {
 
 3. **`tests/test_parsers/test_your_sensor.py`** を作成してテストを書く
 
-### 9.3 コミット規約
+### 10.3 コミット規約
 
 ```bash
 git add <files>
@@ -390,7 +477,7 @@ git commit -m "feat: add YourSensor parser (VLP-16 mode)"
 git push origin main
 ```
 
-### 9.4 重要な制約
+### 10.4 重要な制約
 
 - `vendor/` は **変更禁止**（空間ID TS ライブラリ）
 - `CepfFrame` は `frozen=True` のデータクラス — 直接変更不可
@@ -399,7 +486,7 @@ git push origin main
 
 ---
 
-## 10. ドキュメント一覧
+## 11. ドキュメント一覧
 
 | ドキュメント | 内容 |
 |------------|------|
