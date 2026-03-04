@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE / tools
+.vscode/
+.idea/
+.claude/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# アプリ層の環境固有設定
+apps/sensors.json
+apps_ts/sensors.json
+apps/secrets.json
+apps_ts/secrets.json
+
+# テンプレートはGit管理OK
+!apps/sensors.example.json
+!apps_ts/sensors.example.json
+
+# pytest
+.pytest_cache/
+htmlcov/
+.coverage
+
+# Jupyter
+.ipynb_checkpoints/
