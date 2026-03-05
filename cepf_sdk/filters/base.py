@@ -1,5 +1,5 @@
 # cepf_sdk/filters/base.py
-"""フィルター基底クラス"""
+"""フィルター基底クラスおよび GPU/CPU 自動選択ヘルパー"""
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -10,6 +10,31 @@ from typing import Dict, Optional
 import numpy as np
 
 from cepf_sdk.types import CepfPoints
+
+
+# ------------------------------------------------------------------ #
+# GPU / CPU 自動選択ヘルパー                                            #
+# ------------------------------------------------------------------ #
+
+def _get_xp():
+    """CuPy が利用可能な場合は cupy を、そうでなければ numpy を返す。"""
+    try:
+        import cupy as cp
+        cp.cuda.runtime.getDeviceCount()   # GPU が実際に使えるか確認
+        return cp
+    except Exception:
+        return np
+
+
+def _to_numpy(arr) -> np.ndarray:
+    """CuPy 配列なら numpy に変換して返す。numpy はそのまま返す。"""
+    try:
+        import cupy as cp
+        if isinstance(arr, cp.ndarray):
+            return cp.asnumpy(arr)
+    except ImportError:
+        pass
+    return arr
 
 
 class FilterMode(Enum):

@@ -2,7 +2,7 @@
 """ノイズ検出フィルタ"""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 
@@ -11,14 +11,24 @@ from cepf_sdk.filters.base import FilterMode, PointFilter
 from cepf_sdk.types import CepfPoints
 
 
+# ------------------------------------------------------------------ #
+# ハードコード定数 — 用途に合わせてここを変更する                        #
+# ------------------------------------------------------------------ #
+
+NEIGHBORS: int   = 5    # 近傍点数の閾値 (この数未満でノイズ判定)
+RADIUS:    float = 0.3  # 近傍探索半径 [m]
+# NOTE: scipy.cKDTree は CPU 専用のため CuPy による GPU 演算は行わない。
+
+
 @dataclass
 class NoiseClassifier(PointFilter):
     """
     孤立点をノイズとして NOISE フラグを付与。
     点は削除しない（FLAG モード）。
+    scipy.cKDTree を使用するため CPU 演算のみ。
     """
-    neighbors: int = 5
-    radius: float = 0.3
+    neighbors: int   = field(default_factory=lambda: NEIGHBORS)
+    radius:    float = field(default_factory=lambda: RADIUS)
     mode: FilterMode = FilterMode.FLAG
     flag_bit: int = PointFlag.NOISE
 

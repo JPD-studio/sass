@@ -2,22 +2,31 @@
 """Statistical Outlier Removal (SOR)"""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 
 from cepf_sdk.filters.base import FilterMode, PointFilter
 from cepf_sdk.types import CepfPoints
 
+# ------------------------------------------------------------------ #
+# ハードコード定数 — 用途に合わせてここを変更する                        #
+# ------------------------------------------------------------------ #
+
+K_NEIGHBORS: int   = 10   # k 近傍点数
+STD_RATIO:   float = 1.0  # 標準偏差の倍率 (小さいほど厳しく除去)
+# NOTE: scipy.cKDTree は CPU 専用のため CuPy による GPU 演算は行わない。
+
 
 @dataclass
 class StatisticalOutlierRemoval(PointFilter):
     """
     k近傍の平均距離が (全体平均 + std_ratio × 標準偏差) を超える点を除去。
+    scipy.spatial.cKDTree を使用（CPU 演算）。
     """
-    k_neighbors: int = 10
-    std_ratio: float = 1.0
-    mode: FilterMode = FilterMode.MASK
+    k_neighbors: int   = field(default_factory=lambda: K_NEIGHBORS)
+    std_ratio:   float = field(default_factory=lambda: STD_RATIO)
+    mode:     FilterMode = FilterMode.MASK
     flag_bit: int = 0x0000
 
     def compute_mask(self, points: CepfPoints) -> np.ndarray:

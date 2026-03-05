@@ -2,41 +2,52 @@
 """ボクセルダウンサンプリング"""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 
-from cepf_sdk.filters.base import FilterMode, PointFilter
+from cepf_sdk.filters.base import FilterMode, PointFilter, _get_xp, _to_numpy
 from cepf_sdk.types import CepfPoints
+
+# ------------------------------------------------------------------ #
+# ハードコード定数 — 用途に合わせてここを変更する                        #
+# ------------------------------------------------------------------ #
+
+VOXEL_SIZE: float = 0.05  # ボクセルグリッドサイズ [m]
 
 
 @dataclass
 class VoxelDownsample(PointFilter):
     """
     ボクセルグリッド内の最初の点だけ残す。
+    CuPy が利用可能な場合は GPU で演算する。
     """
-    voxel_size: float = 0.05
-    mode: FilterMode = FilterMode.MASK
+    voxel_size: float = field(default_factory=lambda: VOXEL_SIZE)
+    mode:     FilterMode = FilterMode.MASK
     flag_bit: int = 0x0000
 
     def compute_mask(self, points: CepfPoints) -> np.ndarray:
-        x = np.asarray(points["x"])
-        y = np.asarray(points["y"])
-        z = np.asarray(points["z"])
+        xp = _get_xp()
+
+        x = xp.asarray(points["x"], dtype=xp.float32)
+        y = xp.asarray(points["y"], dtype=xp.float32)
+        z = xp.asarray(points["z"], dtype=xp.float32)
 
         n = len(x)
         if n == 0:
             return np.zeros(0, dtype=bool)
 
-        inv = 1.0 / self.voxel_size
-        ix = np.floor(x * inv).astype(np.int64)
-        iy = np.floor(y * inv).astype(np.int64)
-        iz = np.floor(z * inv).astype(np.int64)
+        inv = xp.float32(1.0 / self.voxel_size)
+        ix = xp.floor(x * inv).astype(xp.int64)
+        iy = xp.floor(y * inv).astype(xp.int64)
+        iz = xp.floor(z * inv).astype(xp.int64)
 
-        # ユニークなボクセルを見つける
-        keys = ix * 1000003 + iy * 1000033 + iz  # 簡易ハッシュ
-        _, first_indices = np.unique(keys, return_index=True)
+        # 簡易ハッシュでユニークなボクセルを見つける
+        keys = ix * xp.int64(1_000_003) + iy * xp.int64(1_000_033) + iz
+        _, first_indices = xp.unique(keys, return_index=True)
 
+        # first_indices を numpy に戻して mask を作成
+        fi = _to_numpy(first_indices)
         mask = np.zeros(n, dtype=bool)
-        mask[first_indices] = True
+        mask[fi] = True
         return mask

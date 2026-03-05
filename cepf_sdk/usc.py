@@ -69,8 +69,10 @@ class UnifiedSenseCloud:
 
         usc = cls()
 
-        # センサー設定を読み込み
+        # センサー設定を読み込み（enabled: false のエントリはスキップ）
         for sensor_cfg in config_dict.get('sensors', []):
+            if not sensor_cfg.get('enabled', True):
+                continue
             sensor_config_dict = sensor_cfg.get('config', {})
 
             # sensor_type を文字列 → enum に変換

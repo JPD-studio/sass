@@ -10,6 +10,17 @@ import numpy as np
 from cepf_sdk.filters.base import FilterMode, PointFilter
 from cepf_sdk.types import CepfPoints
 
+# ------------------------------------------------------------------ #
+# ハードコード定数 — 用途に合わせてここを変更する                        #
+# ------------------------------------------------------------------ #
+
+# 多角形頂点 (XY 平面) のデフォルト。空リストの場合は全点を通過させる。
+DEFAULT_POLYGON: List[Tuple[float, float]] = []
+Z_MIN: float = -float("inf")  # Z 下限 [m]
+Z_MAX: float =  float("inf")  # Z 上限 [m]
+# NOTE: PolygonFilter の内外判定ループは Python で実装されているため
+#       CuPy による GPU 演算は行わない。数万点程度なら CPU で十分高速。
+
 
 @dataclass
 class PolygonFilter(PointFilter):

@@ -1,41 +1,161 @@
 {
+  "_comment": "enabled: true のセンサーのみ USC に登録されます。センサーを切り替えるには使用したいエントリを true、他を false にしてください。",
   "sensors": [
     {
-      "sensor_id": "lidar_north",
-      "parser_name": "robosense_airy",
-      "config": {
-        "sensor_type": "LIDAR",
-        "model": "RoboSense Airy",
-        "serial_number": "RS20250101",
-        "firmware_version": "2.3.1",
-        "num_channels": 32,
-        "horizontal_fov_deg": 360.0,
-        "vertical_fov_deg": 25.0,
-        "max_range_m": 200.0,
-        "range_resolution_m": 0.1
-      },
-      "transform": {
-        "translation": [1.0, 0.0, 0.5],
-        "rotation_quaternion": [0.707, 0.0, 0.707, 0.0]
-      }
-    },
-    {
-      "sensor_id": "lidar_south",
+      "enabled": true,
+      "sensor_id": "lidar",
       "parser_name": "ouster_dome128",
       "config": {
         "sensor_type": "LIDAR",
         "model": "Ouster Dome 128",
-        "max_range_m": 120.0
+        "serial_number": "",
+        "firmware_version": "",
+        "num_channels": 128,
+        "horizontal_fov_deg": 360.0,
+        "vertical_fov_deg": 90.0,
+        "max_range_m": 120.0,
+        "range_resolution_m": 0.02,
+        "velocity_resolution_mps": 0.1
+      },
+      "transform": {
+        "translation": [0.0, 0.0, 0.0],
+        "rotation_quaternion": [1.0, 0.0, 0.0, 0.0]
+      }
+    },
+    {
+      "enabled": false,
+      "sensor_id": "lidar",
+      "parser_name": "ouster",
+      "config": {
+        "sensor_type": "LIDAR",
+        "model": "Ouster OS1-128",
+        "serial_number": "",
+        "firmware_version": "",
+        "num_channels": 128,
+        "horizontal_fov_deg": 360.0,
+        "vertical_fov_deg": 45.0,
+        "max_range_m": 120.0,
+        "range_resolution_m": 0.02,
+        "velocity_resolution_mps": 0.1
+      },
+      "transform": {
+        "translation": [0.0, 0.0, 0.0],
+        "rotation_quaternion": [1.0, 0.0, 0.0, 0.0]
+      }
+    },
+    {
+      "enabled": false,
+      "sensor_id": "lidar",
+      "parser_name": "robosense_airy",
+      "config": {
+        "sensor_type": "LIDAR",
+        "model": "RoboSense Airy",
+        "serial_number": "",
+        "firmware_version": "",
+        "num_channels": 16,
+        "horizontal_fov_deg": 360.0,
+        "vertical_fov_deg": 25.0,
+        "max_range_m": 25.0,
+        "range_resolution_m": 0.05,
+        "velocity_resolution_mps": 0.1
+      },
+      "transform": {
+        "translation": [0.0, 0.0, 0.0],
+        "rotation_quaternion": [1.0, 0.0, 0.0, 0.0]
+      }
+    },
+    {
+      "enabled": false,
+      "sensor_id": "lidar",
+      "parser_name": "velodyne",
+      "config": {
+        "sensor_type": "LIDAR",
+        "model": "Velodyne VLP-16",
+        "serial_number": "",
+        "firmware_version": "",
+        "num_channels": 16,
+        "horizontal_fov_deg": 360.0,
+        "vertical_fov_deg": 30.0,
+        "max_range_m": 100.0,
+        "range_resolution_m": 0.1,
+        "velocity_resolution_mps": 0.1
+      },
+      "transform": {
+        "translation": [0.0, 0.0, 0.0],
+        "rotation_quaternion": [1.0, 0.0, 0.0, 0.0]
+      }
+    },
+    {
+      "enabled": false,
+      "sensor_id": "lidar",
+      "parser_name": "velodyne",
+      "config": {
+        "sensor_type": "LIDAR",
+        "model": "Velodyne VLP-32C",
+        "serial_number": "",
+        "firmware_version": "",
+        "num_channels": 32,
+        "horizontal_fov_deg": 360.0,
+        "vertical_fov_deg": 40.0,
+        "max_range_m": 200.0,
+        "range_resolution_m": 0.1,
+        "velocity_resolution_mps": 0.1
+      },
+      "transform": {
+        "translation": [0.0, 0.0, 0.0],
+        "rotation_quaternion": [1.0, 0.0, 0.0, 0.0]
+      }
+    },
+    {
+      "enabled": false,
+      "sensor_id": "radar",
+      "parser_name": "ti_radar",
+      "config": {
+        "sensor_type": "RADAR",
+        "model": "TI AWR1843",
+        "serial_number": "",
+        "firmware_version": "",
+        "num_channels": 1,
+        "horizontal_fov_deg": 120.0,
+        "vertical_fov_deg": 30.0,
+        "max_range_m": 60.0,
+        "range_resolution_m": 0.04,
+        "velocity_resolution_mps": 0.05
+      },
+      "transform": {
+        "translation": [0.0, 0.0, 0.0],
+        "rotation_quaternion": [1.0, 0.0, 0.0, 0.0]
+      }
+    },
+    {
+      "enabled": false,
+      "sensor_id": "radar",
+      "parser_name": "ti_radar",
+      "config": {
+        "sensor_type": "RADAR",
+        "model": "TI IWR6843",
+        "serial_number": "",
+        "firmware_version": "",
+        "num_channels": 1,
+        "horizontal_fov_deg": 120.0,
+        "vertical_fov_deg": 30.0,
+        "max_range_m": 60.0,
+        "range_resolution_m": 0.04,
+        "velocity_resolution_mps": 0.05
+      },
+      "transform": {
+        "translation": [0.0, 0.0, 0.0],
+        "rotation_quaternion": [1.0, 0.0, 0.0, 0.0]
       }
     }
   ],
   "installation": {
-    "reference_description": "ビル屋上東側にマウント",
-    "reference_latitude": 35.6762,
-    "reference_longitude": 139.6503,
-    "reference_altitude": 220.5,
+    "reference_description": "明石市立天文科学館 時計台（日本標準時子午線 東経135度00分 真上）",
+    "reference_latitude": 34.649394,
+    "reference_longitude": 135.001478,
+    "reference_altitude": 54.0,
     "reference_datum": "WGS84",
-    "sensor_offset": [1.5, 0.2, 0.3],
-    "sensor_offset_description": "屋上コンクリート基準点からの相対位置"
+    "sensor_offset": [0.0, 0.0, 1.0],
+    "sensor_offset_description": "離着陸面から LiDAR 設置高さ（マスト高さ確定後に変更）"
   }
 }

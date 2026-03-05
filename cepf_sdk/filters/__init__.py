@@ -6,6 +6,7 @@ from cepf_sdk.filters.range.cylindrical import CylindricalFilter
 from cepf_sdk.filters.range.spherical import SphericalFilter
 from cepf_sdk.filters.range.box import BoxFilter
 from cepf_sdk.filters.range.polygon import PolygonFilter
+from cepf_sdk.filters.range.frustum import FrustumFilter
 from cepf_sdk.filters.statistical.ror import RadiusOutlierRemoval
 from cepf_sdk.filters.statistical.sor import StatisticalOutlierRemoval
 from cepf_sdk.filters.statistical.voxel import VoxelDownsample
@@ -24,6 +25,7 @@ __all__ = [
     "SphericalFilter",
     "BoxFilter",
     "PolygonFilter",
+    "FrustumFilter",
     "RadiusOutlierRemoval",
     "StatisticalOutlierRemoval",
     "VoxelDownsample",
