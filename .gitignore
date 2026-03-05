@@ -48,3 +48,8 @@ htmlcov/
 
 # Jupyter
 .ipynb_checkpoints/
+
+# PCAP ファイル（大容量、リプレイ用テンポラリデータ）
+pcap/
+*.pcap
+demo.pcap
