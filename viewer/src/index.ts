@@ -89,7 +89,7 @@ export class ViewerApp {
       const p = points[i];
       this._positions[i * 3] = p.x;
       this._positions[i * 3 + 1] = p.y;
-      this._positions[i * 3 + 2] = p.z;
+      this._positions[i * 3 + 2] = -p.z; // センサーフレームの Z は下向き → 反転
 
       // 距離に応じた色: 近い=青、遠い=赤（HSL）
       const dist = Math.sqrt(p.x * p.x + p.y * p.y + p.z * p.z);
@@ -106,6 +106,23 @@ export class ViewerApp {
     geom.setDrawRange(0, n);
     (geom.attributes.position as THREE.BufferAttribute).needsUpdate = true;
     (geom.attributes.color as THREE.BufferAttribute).needsUpdate = true;
+  }
+
+  // --- public getters for RenderLayer access ---
+
+  /** Three.js Scene（RangeWireframeLayer が静的ジオメトリを追加するために使用） */
+  get scene(): THREE.Scene {
+    return this._scene;
+  }
+
+  /** 点群 Points オブジェクト（PointCloudLayer が visible 制御に使用） */
+  get pointCloudObject(): THREE.Points {
+    return this._pointCloud;
+  }
+
+  /** ボクセル InstancedMesh（VoxelLayer が visible 制御に使用） */
+  get voxelObject(): THREE.InstancedMesh {
+    return this._voxelRenderer.mesh;
   }
 
   updateVoxels(snapshot: VoxelSnapshot, cellSize = 1.0): void {
