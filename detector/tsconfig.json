@@ -10,9 +10,12 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "paths": {
-      "../../voxel/src/types.js": ["../voxel/src/types.ts"]
+      "../../voxel/src/types.js": ["../voxel/dist/types.js"]
     }
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "tests"]
+  "exclude": ["node_modules", "dist", "tests"],
+  "references": [
+    { "path": "../voxel" }
+  ]
 }

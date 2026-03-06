@@ -9,7 +9,21 @@ import { BackgroundVoxelMap } from "../../voxel/src/background-voxel-map.js";
 import { computeDiff } from "../../voxel/src/voxel-diff.js";
 import { IntrusionDetector } from "../../detector/src/intrusion-detector.js";
 import { AdaptiveStddevThreshold } from "../../detector/src/threshold/adaptive-stddev.js";
-import config from "../sensors.example.json" with { type: "json" };
+// sensors.json (ローカル設定) が存在すればそちらを優先、なければ example にフォールバック
+import { createRequire } from "module";
+import { existsSync } from "fs";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const sensorsJsonPath = join(__dirname, "../sensors.json");
+const sensorsFallbackPath = join(__dirname, "../sensors.example.json");
+const _require = createRequire(import.meta.url);
+const config: {
+  websocket_url: string;
+  voxel_cell_size: number;
+  detector: { strategy: string; sigma: number; min_background_samples: number };
+} = existsSync(sensorsJsonPath) ? _require(sensorsJsonPath) : _require(sensorsFallbackPath);
 
 const conn = new WsConnection({
   url: config.websocket_url,

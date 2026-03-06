@@ -1,0 +1,5 @@
+2026-03-06 15:54:59,264 [INFO] websockets.server: server listening on 0.0.0.0:8765
+2026-03-06 15:54:59,264 [INFO] cepf_sdk.transport.websocket_server: WebSocketTransport: listening on ws://0.0.0.0:8765
+2026-03-06 15:54:59,264 [INFO] __main__: WebSocket サーバー起動: ws://0.0.0.0:8765
+2026-03-06 15:54:59,264 [INFO] __main__: ブラウザ: http://192.168.10.15:3000 または http://localhost:3000
+2026-03-06 15:54:59,264 [INFO] __main__: ブラウザ接続待機中... (http://192.168.10.15:3000 を開いてください)

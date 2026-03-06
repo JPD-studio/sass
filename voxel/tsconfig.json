@@ -6,6 +6,8 @@
     "strict": true,
     "outDir": "dist",
     "rootDir": "src",
+    "composite": true,
+    "declarationMap": true,
     "declaration": true,
     "esModuleInterop": true,
     "skipLibCheck": true
