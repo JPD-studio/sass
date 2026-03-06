@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!--
+    WebSocket URL はデフォルトで同一ホスト:8765 に自動接続します。
+    上書きする場合はこの meta を編集するか、URL に ?ws=ws://hostname:8765 を付加。
+    空にすると自動解決（window.location.hostname:8765）が使われます。
+  -->
+  <meta name="ws-url" content="" />
+  <title>CEPF SDK Viewer</title>
+  <link rel="stylesheet" href="styles/style.css" />
+</head>
+<body>
+  <div id="viewer-container"></div>
+  <div id="status-bar">
+    <span id="status-ws">WS: 接続中...</span>
+    <span id="status-frames">フレーム: 0</span>
+    <span id="status-points">点数: -</span>
+  </div>
+  <script src="dist/bundle.js"></script>
+</body>
+</html>
