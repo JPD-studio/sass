@@ -53,6 +53,4 @@ htmlcov/
 pcap/
 *.pcap
 demo.pcap
-pcap/
-demo.pcap
 
