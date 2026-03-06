@@ -22,6 +22,11 @@ export class VoxelRenderer {
     scene.add(this._mesh);
   }
 
+  /** InstancedMesh への public アクセス（ViewerApp.voxelObject 経由で visible 制御に使用） */
+  get mesh(): THREE.InstancedMesh {
+    return this._mesh;
+  }
+
   update(snapshot: VoxelSnapshot, cellSize = 1.0): void {
     // 最大カウントを計算（密度カラー用）
     let maxCount = 1;
