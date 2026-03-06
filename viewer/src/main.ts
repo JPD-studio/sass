@@ -1,18 +1,14 @@
 /**
  * viewer/src/main.ts
  * ブラウザ向けビューワーエントリーポイント。
- * FrameDispatcher で受信フレームを 3 つの RenderLayer に分配する。
+ * WsConnection でフレームを受信し、VoxelGrid でボクセル化して ViewerApp に渡す。
  *
  * WebSocket URL は index.html の <meta name="ws-url" content="ws://..."> か
  * URL クエリパラメータ ?ws=ws://... で上書き可能。デフォルトは localhost:8765。
  */
 import { WsConnection } from "../../ws-client/src/ws-connection.js";
+import { VoxelGrid } from "../../voxel/src/voxel-grid.js";
 import { ViewerApp } from "./index.js";
-import { FrameDispatcher } from "./layers/frame-dispatcher.js";
-import { PointCloudLayer } from "./layers/point-cloud-layer.js";
-import { VoxelLayer } from "./layers/voxel-layer.js";
-import { RangeWireframeLayer } from "./layers/range-wireframe-layer.js";
-import { LayerPanel } from "./overlays/layer-panel.js";
 
 // WebSocket URL の解決（URLパラメータ > metaタグ > 同一ホスト自動解決）
 function resolveWsUrl(): string {
@@ -34,17 +30,8 @@ const container = document.getElementById("viewer-container") as HTMLElement;
 if (!container) throw new Error("#viewer-container が見つかりません");
 
 const viewer = new ViewerApp(container);
-const dispatcher = new FrameDispatcher();
 
-// --- 描画レイヤー登録 ---
-dispatcher.register(new PointCloudLayer(viewer));
-dispatcher.register(new VoxelLayer(viewer, VOXEL_CELL_SIZE));
-dispatcher.register(new RangeWireframeLayer(viewer.scene));
-
-// --- レイヤー切替 UI ---
-new LayerPanel(container, dispatcher);
-
-// --- ステータスバー更新ヘルパー ---
+// ステータスバー更新ヘルパー
 const elWs = document.getElementById("status-ws");
 const elFrames = document.getElementById("status-frames");
 const elPoints = document.getElementById("status-points");
@@ -55,15 +42,24 @@ function setStatus(ws: string, frames?: number, points?: number) {
   if (points !== undefined && elPoints) elPoints.textContent = `点数: ${points}`;
 }
 
-// --- WebSocket 受信 ---
 const conn = new WsConnection({
   url: WS_URL,
   reconnectInterval: 3000,
 });
 
+const grid = new VoxelGrid(VOXEL_CELL_SIZE);
+let frameId = 0;
+
 conn.onMessage((points) => {
-  dispatcher.dispatch(points);
-  setStatus("接続済み ✓", dispatcher.frameId, points.length);
+  // 生の点群表示（ouster_bridge3 同等のカラー点群）
+  viewer.updatePoints(points);
+
+  // ボクセル化して半透明ボクセル表示
+  grid.clear();
+  points.forEach((p) => grid.addPoint(p.x, p.y, p.z, frameId));
+  frameId++;
+  viewer.updateVoxels(grid.snapshot(), VOXEL_CELL_SIZE);
+  setStatus("接続済み ✓", frameId, points.length);
 });
 
 conn.connect();

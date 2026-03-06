@@ -30,38 +30,7 @@ body {
   z-index: 100;
 }
 
-/* --- LayerPanel（表示レイヤー切替 UI） --- */
-.layer-panel {
-  position: absolute;
-  top: 8px;
-  left: 8px;
-  z-index: 100;
-  background: rgba(0, 0, 0, 0.7);
-  color: #eee;
-  font-family: monospace;
-  font-size: 13px;
-  padding: 8px 12px;
-  border-radius: 6px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  pointer-events: auto;
-  user-select: none;
-}
-
-.layer-panel strong {
-  color: #0f0;
-  margin-bottom: 2px;
-}
-
-.layer-panel label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-}
-
-.layer-panel input[type="checkbox"] {
-  accent-color: #0f0;
-  cursor: pointer;
+#viewer-container {
+  width: 100vw;
+  height: 100vh;
 }
