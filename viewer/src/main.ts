@@ -1,21 +1,69 @@
 /**
  * viewer/src/main.ts
  * ブラウザ向けビューワーエントリーポイント。
- * FrameDispatcher で受信フレームを 3 つの RenderLayer に分配する。
  *
- * WebSocket URL は index.html の <meta name="ws-url" content="ws://..."> か
- * URL クエリパラメータ ?ws=ws://... で上書き可能。デフォルトは localhost:8765。
+ * config.json を fetch してモードを決定:
+ *   voxel_mode: "local"  → VoxelLayer (センサーローカル座標系) [デフォルト]
+ *   voxel_mode: "global" → GlobalVoxelLayer (ALoGS 空間ID + WGS84 逆変換)
+ *   voxel_mode: "both"   → 左右分割表示 (左: local / 右: global)
+ *
+ * WebSocket URL は config.json > meta タグ > URL クエリ > localhost:8765 の優先順
+ *
+ * ※ top-level await は Jetson Chromium との互換性問題があるため
+ *    async IIFE パターンを使用 (webpack experiments.topLevelAwait 不要)
  */
 import { WsConnection } from "../../ws-client/src/ws-connection.js";
 import { ViewerApp } from "./index.js";
 import { FrameDispatcher } from "./layers/frame-dispatcher.js";
 import { PointCloudLayer } from "./layers/point-cloud-layer.js";
 import { VoxelLayer } from "./layers/voxel-layer.js";
+import { GlobalVoxelLayer } from "./layers/global-voxel-layer.js";
 import { RangeWireframeLayer } from "./layers/range-wireframe-layer.js";
 import { LayerPanel } from "./overlays/layer-panel.js";
+import type { SensorMount } from "../../spatial-grid/src/types.js";
 
-// WebSocket URL の解決（URLパラメータ > metaタグ > 同一ホスト自動解決）
-function resolveWsUrl(): string {
+// ── 設定型 ──
+interface ViewerConfig {
+  websocket_url?: string;
+  voxel_mode?: "local" | "global" | "both";
+  voxel_cell_size?: number;
+  global_voxel_unit_m?: number;
+  global_grid_mode?: "wgs84" | "enu";
+  coin?: {
+    position: [number, number, number];
+    radius_m?: number;
+    height_m?: number;
+    rotation?: { x?: number; y?: number; z?: number };
+  };
+  mount?: {
+    position: { lat: number; lng: number; alt: number };
+    orientation: { heading: number; pitch: number; roll: number };
+    mounting_type?: string;
+  };
+}
+
+// ── ステータスバー要素 (DOMContentLoaded 後に参照) ──
+function setStatus(ws: string, frames?: number, points?: number) {
+  const elWs     = document.getElementById("status-ws");
+  const elFrames = document.getElementById("status-frames");
+  const elPoints = document.getElementById("status-points");
+  if (elWs)     elWs.textContent     = `WS: ${ws}`;
+  if (frames !== undefined && elFrames) elFrames.textContent = `フレーム: ${frames}`;
+  if (points !== undefined && elPoints) elPoints.textContent = `点数: ${points}`;
+}
+
+// ── マウント情報を SensorMount 型に変換 ──
+function buildMount(cfg: ViewerConfig): SensorMount | null {
+  if (!cfg.mount) return null;
+  return {
+    position: cfg.mount.position,
+    orientation: cfg.mount.orientation,
+    mounting_type: cfg.mount.mounting_type ?? "pole_mounted",
+  };
+}
+
+// ── WebSocket URL 解決 ──
+function resolveWsUrl(config: ViewerConfig): string {
   const params = new URLSearchParams(window.location.search);
   const fromQuery = params.get("ws");
   if (fromQuery) return fromQuery;
@@ -23,50 +71,130 @@ function resolveWsUrl(): string {
   const meta = document.querySelector<HTMLMetaElement>('meta[name="ws-url"]');
   if (meta?.content) return meta.content;
 
-  // ouster_bridge3 同様: 同一ホストの 8765 ポートに接続
+  if (config.websocket_url) return config.websocket_url;
+
   return `ws://${window.location.hostname}:8765`;
 }
 
-const WS_URL = resolveWsUrl();
-const VOXEL_CELL_SIZE = 1.0;
+// ================================================================
+//  メイン初期化 — async IIFE
+//  top-level await を使わないことで webpack の実験的機能に依存しない
+// ================================================================
+(async () => {
+  // ── config.json 読み込み (失敗時はデフォルト値) ──
+  let config: ViewerConfig = {};
+  try {
+    const resp = await fetch("/config.json");
+    if (resp.ok) config = await resp.json() as ViewerConfig;
+  } catch {
+    // config.json がない場合はデフォルト動作 (ローカルモード)
+  }
 
-const container = document.getElementById("viewer-container") as HTMLElement;
-if (!container) throw new Error("#viewer-container が見つかりません");
+  const WS_URL    = resolveWsUrl(config);
+  const voxelMode = config.voxel_mode ?? "local";
+  const cellSize  = config.voxel_cell_size ?? 1.0;
+  const unitM     = config.global_voxel_unit_m ?? 10.0;
+  const gridMode  = config.global_grid_mode ?? "wgs84";
 
-const viewer = new ViewerApp(container);
-const dispatcher = new FrameDispatcher();
+  // ── WebSocket 接続 (共通) ──
+  const conn = new WsConnection({ url: WS_URL, reconnectInterval: 3000 });
 
-// --- 描画レイヤー登録 ---
-dispatcher.register(new PointCloudLayer(viewer));
-dispatcher.register(new VoxelLayer(viewer, VOXEL_CELL_SIZE));
-dispatcher.register(new RangeWireframeLayer(viewer.scene));
+  // ================================================================
+  //  スプリットモード (voxel_mode: "both")
+  //  左ペイン: ローカルボクセル / 右ペイン: グローバルボクセル
+  // ================================================================
+  if (voxelMode === "both") {
+    document.body.classList.add("split-mode");
 
-// --- レイヤー切替 UI ---
-new LayerPanel(container, dispatcher);
+    const containerLeft  = document.getElementById("viewer-left")  as HTMLElement;
+    const containerRight = document.getElementById("viewer-right") as HTMLElement;
 
-// --- ステータスバー更新ヘルパー ---
-const elWs = document.getElementById("status-ws");
-const elFrames = document.getElementById("status-frames");
-const elPoints = document.getElementById("status-points");
+    // カメラ同期用フラグ（無限ループ防止）
+    let syncing = false;
 
-function setStatus(ws: string, frames?: number, points?: number) {
-  if (elWs) elWs.textContent = `WS: ${ws}`;
-  if (frames !== undefined && elFrames) elFrames.textContent = `フレーム: ${frames}`;
-  if (points !== undefined && elPoints) elPoints.textContent = `点数: ${points}`;
-}
+    // 左右のViewerApp を作成（カメラ同期コールバック付き）
+    const viewerLeft  = new ViewerApp(containerLeft, config.coin, (state) => {
+      if (syncing) return;
+      syncing = true;
+      viewerRight.setCameraState(state);
+      syncing = false;
+    });
 
-// --- WebSocket 受信 ---
-const conn = new WsConnection({
-  url: WS_URL,
-  reconnectInterval: 3000,
-});
+    const viewerRight = new ViewerApp(containerRight, config.coin, (state) => {
+      if (syncing) return;
+      syncing = true;
+      viewerLeft.setCameraState(state);
+      syncing = false;
+    });
 
-conn.onMessage((points) => {
-  dispatcher.dispatch(points);
-  setStatus("接続済み ✓", dispatcher.frameId, points.length);
-});
+    const dispLeft  = new FrameDispatcher();
+    const dispRight = new FrameDispatcher();
 
-conn.connect();
-viewer.render();
+    // 左: ローカルボクセル
+    dispLeft.register(new PointCloudLayer(viewerLeft));
+    dispLeft.register(new VoxelLayer(viewerLeft, cellSize));
+    dispLeft.register(new RangeWireframeLayer(viewerLeft.scene));
+    new LayerPanel(containerLeft, dispLeft);
 
-console.log(`[viewer] WebSocket: ${WS_URL}`);
+    // 右: グローバルボクセル
+    dispRight.register(new PointCloudLayer(viewerRight));
+    const mount = buildMount(config);
+    if (mount) {
+      dispRight.register(new GlobalVoxelLayer(viewerRight, mount, unitM, gridMode));
+    } else {
+      dispRight.register(new VoxelLayer(viewerRight, cellSize));
+      console.warn("[viewer] both モードで mount 未設定: 右ペインをローカルモードで代替");
+    }
+    dispRight.register(new RangeWireframeLayer(viewerRight.scene));
+    new LayerPanel(containerRight, dispRight);
+
+    conn.onMessage((points) => {
+      dispLeft.dispatch(points);
+      dispRight.dispatch(points);
+      setStatus("接続済み ✓", dispLeft.frameId, points.length);
+    });
+
+    viewerLeft.render();
+    viewerRight.render();
+    console.log(`[viewer] 分割モード: 左=local(${cellSize}m), 右=global(${unitM}m)`);
+
+  // ================================================================
+  //  シングルモード (voxel_mode: "local" | "global")
+  // ================================================================
+  } else {
+    const container = document.getElementById("viewer-container") as HTMLElement;
+    if (!container) throw new Error("#viewer-container が見つかりません");
+
+    const viewer     = new ViewerApp(container, config.coin);
+    const dispatcher = new FrameDispatcher();
+
+    dispatcher.register(new PointCloudLayer(viewer));
+
+    if (voxelMode === "global") {
+      const mount = buildMount(config);
+      if (mount) {
+        dispatcher.register(new GlobalVoxelLayer(viewer, mount, unitM, gridMode));
+        console.log(`[viewer] グローバルモード: unit=${unitM}m, grid=${gridMode}, mount=(${mount.position.lat}, ${mount.position.lng})`);
+      } else {
+        dispatcher.register(new VoxelLayer(viewer, cellSize));
+        console.warn("[viewer] global モードで mount 未設定: ローカルモードで代替");
+      }
+    } else {
+      dispatcher.register(new VoxelLayer(viewer, cellSize));
+      console.log(`[viewer] ローカルモード: cellSize=${cellSize}m`);
+    }
+
+    dispatcher.register(new RangeWireframeLayer(viewer.scene));
+    new LayerPanel(container, dispatcher);
+
+    conn.onMessage((points) => {
+      dispatcher.dispatch(points);
+      setStatus("接続済み ✓", dispatcher.frameId, points.length);
+    });
+
+    viewer.render();
+  }
+
+  conn.connect();
+  console.log(`[viewer] WebSocket: ${WS_URL}, mode: ${voxelMode}`);
+})();

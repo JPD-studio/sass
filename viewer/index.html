@@ -13,7 +13,19 @@
   <link rel="stylesheet" href="styles/style.css" />
 </head>
 <body>
+  <!-- シングルモード (voxel_mode: "local" | "global") -->
   <div id="viewer-container"></div>
+
+  <!-- スプリットモード (voxel_mode: "both") — JS が display:flex に切り替える -->
+  <div id="viewer-split">
+    <div id="viewer-left" class="viewer-pane">
+      <div class="pane-label">ローカルモード</div>
+    </div>
+    <div id="viewer-right" class="viewer-pane">
+      <div class="pane-label">グローバルモード</div>
+    </div>
+  </div>
+
   <div id="status-bar">
     <span id="status-ws">WS: 接続中...</span>
     <span id="status-frames">フレーム: 0</span>

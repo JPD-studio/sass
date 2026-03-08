@@ -21,6 +21,12 @@ export default {
         ],
         exclude: /node_modules/,
       },
+      {
+        // viewer が "type":"module" のため CJS vendor が ESM 扱いされ
+        // exports is not defined になる問題を回避
+        test: /[/\\]vendor[/\\].*\.js$/,
+        type: "javascript/auto",
+      },
     ],
   },
   resolve: {
@@ -35,4 +41,5 @@ export default {
     path: path.resolve(__dirname, "dist"),
   },
   mode: "development",
+  devtool: false,  // eval devtool は大規模 CJS ベンダーモジュールで問題が起きるため無効化
 };
