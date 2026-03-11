@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import logging
+import sys
+import threading
 from pathlib import Path
 
 from cepf_sdk import UnifiedSenseCloud
 from cepf_sdk.filters.range.cylindrical import CylindricalFilter
 from cepf_sdk.filters.pipeline import FilterPipeline
+from cepf_sdk.sources import AiryLiveSource
+from cepf_sdk.transport import WebSocketTransport
 
 logger = logging.getLogger(__name__)
 
@@ -53,11 +58,45 @@ def main() -> None:
 
     logger.info("Pipeline ready. Waiting for sensor data...")
 
-    # ここからセンサーデータの受信・処理ループを実装
-    # 例:
-    #   for raw_data in receive_udp_packets():
-    #       frame = usc.forge("lidar_north", raw_data)
-    #       process_frame(frame)
+    transport = None
+    ws_loop = None
+    # WebSocket 配信を有効にする場合はこの1行を有効に、無効にする場合はコメントアウト
+    transport, ws_loop = _start_websocket_server()
+
+    source = AiryLiveSource(usc, sensor_id="lidar", port=6699)
+    for frame in source.frames():
+        process_frame(frame, transport, ws_loop)
+
+
+def _start_websocket_server(host: str = "0.0.0.0", port: int = 8765):
+    """WebSocket サーバーをバックグラウンドスレッドで起動する。"""
+    transport = WebSocketTransport(host=host, port=port)
+    loop = asyncio.new_event_loop()
+
+    def _thread() -> None:
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(transport.start())
+        loop.run_forever()
+
+    threading.Thread(target=_thread, daemon=True).start()
+    logger.info("WebSocket server started on ws://%s:%d", host, port)
+    return transport, loop
+
+
+def process_frame(frame, transport=None, ws_loop=None) -> None:
+    """スキャン 1 フレーム分の処理。"""
+    import numpy as np
+    x = frame.points.get("x")
+    y = frame.points.get("y")
+    z = frame.points.get("z")
+    if x is not None and len(x) > 0:
+        r = np.sqrt(np.asarray(x)**2 + np.asarray(y)**2 + np.asarray(z)**2)
+        p = np.percentile(r, [5, 25, 50, 75, 95])
+        logger.info("frame: points=%d  range min=%.3f p5=%.3f p25=%.3f median=%.3f p75=%.3f p95=%.3f max=%.3f [m]",
+                    frame.point_count, float(np.min(r)),
+                    p[0], p[1], p[2], p[3], p[4], float(np.max(r)))
+    if transport is not None and ws_loop is not None:
+        asyncio.run_coroutine_threadsafe(transport.send(frame), ws_loop)
 
 
 def _apply_pipeline(frame, pipeline: FilterPipeline):
