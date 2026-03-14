@@ -1,19 +1,6 @@
 {
   "websocket_url": "ws://127.0.0.1:8765",
-  "voxel_mode": "both",
-  "voxel_cell_size": 1.0,
-  "global_voxel_unit_m": 0.5,
-  "global_grid_mode": "wgs84",
-  "coin": {
-    "position": [1.0, 1.0, 10.0],
-    "radius_m": 0.7,
-    "height_m": 0.3,
-    "rotation": {
-      "x": 1.57,
-      "y": 0.0,
-      "z": 0.0
-    }
-  },
+  "coin": {},
   "mount": {
     "position": {
       "lat": 34.649394,

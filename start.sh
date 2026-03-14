@@ -4,16 +4,20 @@
 # =============================================================================
 #
 #  使い方:
-#    ./start.sh              # デフォルト: 全コンポーネント起動 (PCAP リプレイ + Viewer + Detector)
+#    ./start.sh                 # デフォルト: 全コンポーネント起動
 #    ./start.sh --no-detector   # Detector なしで起動
 #    ./start.sh --no-viewer     # Viewer なしで起動
+#    ./start.sh --no-geo-viewer # Geo-Viewer なしで起動
+#    ./start.sh --split-view    # Viewer を左右分割 (local|global) で起動
 #    ./start.sh --install-only  # 依存関係インストールのみ (起動しない)
+#    ./start.sh --restart       # 既存プロセスをキルしてクリーン再起動
 #    ./start.sh --stop          # 起動中のプロセスを停止
 #
 #  データフロー:
 #    PCAP ──▶ Python パーサー ──▶ WebSocket (ws://0.0.0.0:8765)
-#                                     ├──▶ Viewer   (http://localhost:3000)
-#                                     └──▶ Detector  (ヘッドレス侵入検知)
+#                                     ├──▶ Viewer     (http://localhost:3000) [Three.js]
+#                                     ├──▶ Geo-Viewer (http://localhost:3001) [CesiumJS]
+#                                     └──▶ Detector   (ヘッドレス侵入検知)
 #
 # =============================================================================
 set -euo pipefail
@@ -35,6 +39,7 @@ PCAP_RATE="${SASS_PCAP_RATE:-1.0}"
 # ポート
 WS_PORT=8765
 HTTP_PORT=3000
+GEO_HTTP_PORT=3001
 
 # カラー出力
 RED='\033[0;31m'
@@ -46,17 +51,41 @@ NC='\033[0m' # No Color
 
 # フラグ
 RUN_VIEWER=true
+RUN_GEO_VIEWER=true
 RUN_DETECTOR=true
 INSTALL_ONLY=false
+VIEWER_SPLIT=false
 
 # ──────────────────────────────────────────────────────────────────────────────
 #  引数パース
 # ──────────────────────────────────────────────────────────────────────────────
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --no-viewer)    RUN_VIEWER=false;   shift ;;
-        --no-detector)  RUN_DETECTOR=false; shift ;;
-        --install-only) INSTALL_ONLY=true;  shift ;;
+        --no-viewer)      RUN_VIEWER=false;     shift ;;
+        --no-geo-viewer)  RUN_GEO_VIEWER=false; shift ;;
+        --no-detector)    RUN_DETECTOR=false;   shift ;;
+        --split-view)     VIEWER_SPLIT=true;    shift ;;
+        --install-only)   INSTALL_ONLY=true;    shift ;;
+        --restart)
+            # 既存プロセスをキルして再起動
+            if [[ -d "$PID_DIR" ]]; then
+                echo -e "${YELLOW}■ --restart: 既存プロセスを停止しています...${NC}"
+                for pidfile in "$PID_DIR"/*.pid; do
+                    [[ -f "$pidfile" ]] || continue
+                    pid=$(cat "$pidfile")
+                    name=$(basename "$pidfile" .pid)
+                    if kill -0 "$pid" 2>/dev/null; then
+                        kill "$pid" 2>/dev/null || true
+                        echo -e "  ${RED}✗${NC} $name (PID $pid) を停止しました"
+                    fi
+                    rm -f "$pidfile"
+                done
+                rmdir "$PID_DIR" 2>/dev/null || true
+                echo -e "  ${GREEN}✓${NC} クリーンアップ完了。起動を続行します。"
+            else
+                echo -e "${YELLOW}  既存プロセスはありません。そのまま起動します。${NC}"
+            fi
+            shift ;;
         --stop)
             "$0" _stop
             exit 0
@@ -83,7 +112,7 @@ while [[ $# -gt 0 ]]; do
             exit 0
             ;;
         -h|--help)
-            head -22 "$0" | tail -17
+            head -24 "$0" | tail -19
             exit 0
             ;;
         *)
@@ -216,6 +245,16 @@ for pkg in "${TS_PACKAGES[@]}"; do
 done
 
 # ──────────────────────────────────────────────────────────────────────────────
+#  ステップ 2b: spatial-grid ビルド
+# ──────────────────────────────────────────────────────────────────────────────
+log_step "ステップ 2b: spatial-grid ビルド"
+log_info "spatial-grid: npm install..."
+(cd spatial-grid && npm install --silent 2>&1 | tail -1)
+log_info "spatial-grid: npm run build..."
+(cd spatial-grid && npm run build --silent 2>&1 | tail -1)
+log_ok "spatial-grid ビルド完了"
+
+# ──────────────────────────────────────────────────────────────────────────────
 #  ステップ 3: Viewer バンドル (webpack)
 # ──────────────────────────────────────────────────────────────────────────────
 if $RUN_VIEWER; then
@@ -227,6 +266,20 @@ if $RUN_VIEWER; then
     log_info "viewer: webpack バンドル中..."
     (cd viewer && npm run bundle --silent 2>&1 | tail -3)
     log_ok "viewer バンドル完了 → viewer/dist/bundle.js"
+fi
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  ステップ 3b: Geo-Viewer バンドル (webpack + CesiumJS)
+# ──────────────────────────────────────────────────────────────────────────────
+if $RUN_GEO_VIEWER; then
+    log_step "ステップ 3b: Geo-Viewer バンドル (CesiumJS)"
+
+    log_info "geo-viewer: npm install..."
+    (cd geo-viewer && npm install --silent 2>&1 | tail -1)
+
+    log_info "geo-viewer: webpack バンドル中 (CesiumJS は初回に時間がかかります)..."
+    (cd geo-viewer && npm run bundle --silent 2>&1 | tail -3)
+    log_ok "geo-viewer バンドル完了 → geo-viewer/dist/bundle.js"
 fi
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -258,15 +311,20 @@ mkdir -p "$LOG_DIR"
 
 if [[ -f "$PCAP_FILE" && -f "$PCAP_META" ]]; then
     log_info "Ouster PCAP リプレイ: $PCAP_FILE"
-    PYTHONPATH="$SCRIPT_DIR" python3 apps/ouster_pcap_replay.py \
-        --pcap "$PCAP_FILE" \
-        --meta "$PCAP_META" \
-        --rate "$PCAP_RATE" \
-        --loop \
-        > "$LOG_DIR/pcap_replay.log" 2>&1 &
+    (
+        PYTHONPATH="$SCRIPT_DIR" python3 apps/ouster_pcap_replay.py \
+            --pcap "$PCAP_FILE" \
+            --meta "$PCAP_META" \
+            --rate "$PCAP_RATE" \
+            --loop --verbose
+        EXIT_CODE=$?
+        echo "$(date '+%Y-%m-%d %H:%M:%S') [WATCHDOG] pcap_replay exited with code $EXIT_CODE" >> "$LOG_DIR/pcap_replay.log"
+        echo "$(date '+%Y-%m-%d %H:%M:%S') [WATCHDOG] dmesg (last 10 lines):" >> "$LOG_DIR/pcap_replay.log"
+        dmesg | tail -10 >> "$LOG_DIR/pcap_replay.log" 2>/dev/null || true
+    ) > "$LOG_DIR/pcap_replay.log" 2>&1 &
     REPLAY_PID=$!
     save_pid "pcap_replay" "$REPLAY_PID"
-    log_ok "Ouster PCAP リプレイ起動 (PID $REPLAY_PID)"
+    log_ok "Ouster PCAP リプレイ起動 (PID $REPLAY_PID, verbose mode)"
 elif [[ -f "demo.pcap" ]]; then
     log_info "汎用 PCAP リプレイ: demo.pcap"
     PYTHONPATH="$SCRIPT_DIR" python3 apps/pcap_replay.py \
@@ -298,6 +356,36 @@ fi
 if $RUN_VIEWER; then
     log_step "ステップ 6: Viewer 起動 (HTTP :$HTTP_PORT)"
 
+    # voxel_mode を決定
+    VIEWER_VOXEL_MODE="local"
+    $VIEWER_SPLIT && VIEWER_VOXEL_MODE="both"
+
+    # viewer/config.json が存在する場合は保護、ない場合だけ生成
+    if [ ! -f "viewer/config.json" ]; then
+        log_info "viewer/config.json を初期化中..."
+        python3 -c "
+import json, pathlib
+src = pathlib.Path('apps_ts/sensors.example.json').read_text()
+obj = json.loads(src)
+config = {
+    'websocket_url': 'ws://127.0.0.1:$WS_PORT',
+    'voxel_mode': '$VIEWER_VOXEL_MODE',
+    'voxel_cell_size': 1.0,
+    'global_voxel_unit_m': 10.0,
+    'global_grid_mode': 'wgs84',
+    'coin': {},
+    'mount': obj.get('mount', {
+        'position': {'lat': 0, 'lng': 0, 'alt': 0},
+        'orientation': {'heading': 0, 'pitch': 0, 'roll': 0}
+    })
+}
+print(json.dumps(config, indent=2, ensure_ascii=False))
+" > viewer/config.json
+        log_ok "viewer/config.json を生成しました"
+    else
+        log_ok "viewer/config.json は既に存在します（保護されます）"
+    fi
+
     (cd viewer && npx http-server . -p "$HTTP_PORT" --cors -s \
         > "$LOG_DIR/viewer.log" 2>&1) &
     VIEWER_PID=$!
@@ -308,6 +396,47 @@ if $RUN_VIEWER; then
         log_info "ブラウザで開く: ${GREEN}http://localhost:$HTTP_PORT${NC}"
     else
         log_warn "Viewer のポート確認がタイムアウトしました (ログ: $LOG_DIR/viewer.log)"
+    fi
+fi
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  ステップ 6b: Geo-Viewer 設定生成 + 起動 (HTTP :$GEO_HTTP_PORT)
+# ──────────────────────────────────────────────────────────────────────────────
+if $RUN_GEO_VIEWER; then
+    log_step "ステップ 6b: Geo-Viewer 起動 (CesiumJS HTTP :$GEO_HTTP_PORT)"
+
+    # geo-viewer/config.json が存在する場合は保護、ない場合だけ生成
+    if [ ! -f "geo-viewer/config.json" ]; then
+        log_info "geo-viewer/config.json を初期化中..."
+        python3 -c "
+import json, pathlib
+src = pathlib.Path('apps_ts/sensors.example.json').read_text()
+obj = json.loads(src)
+config = {
+    'websocket_url': 'ws://127.0.0.1:$WS_PORT',
+    'coin': {},
+    'mount': obj.get('mount', {
+        'position': {'lat': 0, 'lng': 0, 'alt': 0},
+        'orientation': {'heading': 0, 'pitch': 0, 'roll': 0}
+    })
+}
+print(json.dumps(config, indent=2, ensure_ascii=False))
+" > geo-viewer/config.json
+        log_ok "geo-viewer/config.json を生成しました"
+    else
+        log_ok "geo-viewer/config.json は既に存在します（保護されます）"
+    fi
+
+    (cd geo-viewer && npx http-server . -p "$GEO_HTTP_PORT" --cors -s \
+        > "$LOG_DIR/geo_viewer.log" 2>&1) &
+    GEO_VIEWER_PID=$!
+    save_pid "geo_viewer" "$GEO_VIEWER_PID"
+
+    if wait_for_port "$GEO_HTTP_PORT" 10 "Geo-Viewer HTTP サーバー"; then
+        log_ok "Geo-Viewer 起動完了 (PID $GEO_VIEWER_PID)"
+        log_info "ブラウザで開く: ${GREEN}http://localhost:$GEO_HTTP_PORT${NC}"
+    else
+        log_warn "Geo-Viewer のポート確認がタイムアウトしました (ログ: $LOG_DIR/geo_viewer.log)"
     fi
 fi
 
@@ -347,9 +476,10 @@ echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━
 echo -e "${GREEN}  SASS 起動完了!${NC}"
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
-echo -e "  ${CYAN}WebSocket${NC}  ws://0.0.0.0:$WS_PORT"
-$RUN_VIEWER   && echo -e "  ${CYAN}Viewer${NC}     http://localhost:$HTTP_PORT"
-$RUN_DETECTOR && echo -e "  ${CYAN}Detector${NC}   ヘッドレスモード (ログ: .logs/detector.log)"
+echo -e "  ${CYAN}WebSocket${NC}   ws://0.0.0.0:$WS_PORT"
+$RUN_VIEWER     && echo -e "  ${CYAN}Viewer${NC}      http://localhost:$HTTP_PORT   (Three.js)"
+$RUN_GEO_VIEWER && echo -e "  ${CYAN}Geo-Viewer${NC}  http://localhost:$GEO_HTTP_PORT  (CesiumJS)"
+$RUN_DETECTOR   && echo -e "  ${CYAN}Detector${NC}    ヘッドレスモード (ログ: .logs/detector.log)"
 echo ""
 echo -e "  ログディレクトリ: ${YELLOW}$LOG_DIR/${NC}"
 echo -e "  停止するには:     ${YELLOW}Ctrl+C${NC} または ${YELLOW}./start.sh --stop${NC}"
@@ -358,4 +488,19 @@ echo ""
 # ──────────────────────────────────────────────────────────────────────────────
 #  フォアグラウンド待機 (Ctrl+C で cleanup が呼ばれる)
 # ──────────────────────────────────────────────────────────────────────────────
-wait
+echo "$(date '+%Y-%m-%d %H:%M:%S') [start.sh] フォアグラウンド待機開始 (PIDs in $PID_DIR/)" >> "$LOG_DIR/startup.log"
+
+# set -e の影響で wait の非ゼロ終了がスクリプト終了を引き起こす場合がある。
+# 無限ループ化して、子プロセスが終了しても再チェックする。
+while true; do
+    # 少なくとも pcap_replay が生きているか確認
+    if [[ -f "$PID_DIR/pcap_replay.pid" ]]; then
+        REPLAY_PID=$(cat "$PID_DIR/pcap_replay.pid")
+        if ! kill -0 "$REPLAY_PID" 2>/dev/null; then
+            echo "$(date '+%Y-%m-%d %H:%M:%S') [start.sh] pcap_replay (PID $REPLAY_PID) が終了しました" >> "$LOG_DIR/startup.log"
+            log_err "pcap_replay プロセスが終了しました。ログを確認: $LOG_DIR/pcap_replay.log"
+            break
+        fi
+    fi
+    sleep 5
+done

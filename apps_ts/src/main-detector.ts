@@ -3,7 +3,7 @@
  * ヘッドレス検知エントリーポイント。
  * WsConnection でフレームを受信し、背景学習 → 差分計算 → 侵入検知を行う。
  */
-import { WsConnection } from "../../ws-client/src/ws-connection.js";
+import { WsConnection } from "../../ws-client/src/ws-connection-node.js";
 import { VoxelGrid } from "../../voxel/src/voxel-grid.js";
 import { BackgroundVoxelMap } from "../../voxel/src/background-voxel-map.js";
 import { computeDiff } from "../../voxel/src/voxel-diff.js";

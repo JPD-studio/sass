@@ -1,21 +1,14 @@
 /**
  * global-voxel-layer.ts
  *
- * グローバルモード用ボクセルレイヤー。
+ * グローバルモード用ボクセルレイヤー（WGS84直接グリッド化）。
  *
- * グリッド方式 (config.json の global_grid_mode で切り替え):
+ * 処理フロー:
+ *   センサーローカル → WGS84 → WGS84グリッド直接化
+ *   キー形式: "ilat:ilng:ialt" (WGS84 各軸の floor インデックス)
  *
- *   "wgs84" (デフォルト):
- *     Encode.GridLine で明石市立天文科学館（JST 基準子午線 135°E）付近の
- *     ALoGS グリッド SW 角を取得 → 地球上に固定されたグリッド原点。
- *     向きの異なる複数センサーが同じ場所を計測すれば同じキーになる。
- *
- *   "enu":
- *     センサーマウント位置を原点とした ENU 座標系でグリッドを切る。
- *     センサー固有の原点なため異なるセンサー間でキーは一致しないが、
- *     ローカルボクセルとの並置比較に便利。
- *
- * キー形式: "ie:in:iu" (ENU 各軸の floor インデックス) — 両モード共通
+ * Encode.GridLine で ALoGS グリッド最小単位を定義し、
+ * WGS84空間上でDirectlyグリッド化する（ENU経由なし）。
  *
  * ⚠️ ブラウザ (webpack) 専用 — vendor/alogs は javascript/auto で CJS バンドル済み
  */
@@ -40,8 +33,10 @@ export class GlobalVoxelLayer implements RenderLayer {
 
   private readonly _renderer: GlobalVoxelRenderer;
   private readonly _sensorTransformer: CoordinateTransformer;
-  private readonly _gridTransformer: CoordinateTransformer;
   private readonly _unitM: number;
+  private readonly _latUnit: number;  // 南北方向の度数差（vendor/alogs GridLine()から取得）
+  private readonly _lngUnit: number;  // 東西方向の度数差（vendor/alogs GridLine()から取得、コサイン誤差含む）
+  private readonly _mountLat: number; // グリッド中心の緯度（コサイン補正用）
 
   constructor(
     viewer: ViewerApp,
@@ -50,29 +45,34 @@ export class GlobalVoxelLayer implements RenderLayer {
     gridMode: "wgs84" | "enu" = "wgs84",
   ) {
     this._unitM = unitM;
+    this._mountLat = mount.position.lat;  // グリッド中心の緯度を保存
     this._sensorTransformer = new CoordinateTransformer(mount);
 
-    // heading=90 → R_sensor = 単位行列 → inverseTransformPoint が純粋な ENU を返す
-    let gridOriginPosition: { lat: number; lng: number; alt: number };
-    if (gridMode === "enu") {
-      // ENU モード: センサーマウント位置を原点
-      gridOriginPosition = mount.position;
-      console.log(`[GlobalVoxelLayer] ENU モード: センサー位置を原点に使用`);
-    } else {
-      // WGS84 モード: 明石付近の ALoGS グリッド SW 角を原点
-      const origin = this._findGridOrigin(AKASHI_LAT, AKASHI_LNG, unitM);
-      gridOriginPosition = { lat: origin.lat, lng: origin.lng, alt: 0 };
-      console.log(`[GlobalVoxelLayer] WGS84 モード: グリッド原点 lat=${origin.lat}, lng=${origin.lng}`);
-    }
+    // Encode.GridLine() から度数差を取得（コサイン誤差を織り込み済み）
+    const { latUnit, lngUnit } = this._getGridUnits(unitM);
+    this._latUnit = latUnit;
+    this._lngUnit = lngUnit;
 
-    const gridMount: SensorMount = {
-      position: gridOriginPosition,
-      orientation: { heading: 90, pitch: 0, roll: 0 },
-      mounting_type: "pole_mounted",
-    };
-    this._gridTransformer = new CoordinateTransformer(gridMount);
+    console.log(
+      `[GlobalVoxelLayer] GridLine() 度数差: ` +
+      `latUnit=${latUnit.toExponential(4)}, lngUnit=${lngUnit.toExponential(4)}, ` +
+      `ratio(lng/lat)=${(lngUnit / latUnit).toFixed(4)}`
+    );
+
+    // 度数差から直接メートル距離を計算（理論値）
+    const distTheory = GlobalVoxelRenderer.getDistanceFromDegreesDifference(
+      AKASHI_LAT,
+      latUnit,
+      lngUnit
+    );
+    console.log(
+      `[GlobalVoxelLayer] 理論値（度数→メートル直計）: ` +
+      `north=${distTheory.north.toFixed(3)}m, east=${distTheory.east.toFixed(3)}m, ` +
+      `ratio=${(distTheory.east / distTheory.north).toFixed(4)}`
+    );
+
     this._renderer = new GlobalVoxelRenderer(
-      viewer.scene, unitM, this._gridTransformer, this._sensorTransformer
+      viewer.scene, unitM, this._sensorTransformer, latUnit, lngUnit
     );
   }
 
@@ -84,28 +84,47 @@ export class GlobalVoxelLayer implements RenderLayer {
     this._renderer.mesh.visible = visible;
   }
 
+  /** 最後に描画されたボクセルの3辺寸法を取得 */
+  getLastVoxelDimensions(): { east: number; north: number; up: number } | undefined {
+    return this._renderer.getLastVoxelDimensions();
+  }
+
   dispose(): void {
     this._renderer.dispose();
   }
 
   /**
-   * Encode.GridLine で ALoGS グリッド SW 角 (lat, lng) を求める。
-   * この点を origin とした CoordinateTransformer (heading=90) は
-   * inverseTransformPoint で純粋な ENU [m] を返す。
+   * Encode.GridLine() で ALoGS グリッド定義を取得
+   * 南北・東西の度数差を分けて返す
+   *
+   * ⚠️ GridLine() の unitList = [1, 2, 4, 5, 10, ...] のため、
+   *    0.5 などはリスト外の値を渡しても unit=1 へ snap される。
+   *    そのため、常に unit=1 (最小有効値) で呼び出して1m相当の
+   *    base 度数差を取得し、unitM 倍して細分化する。
    */
-  private _findGridOrigin(lat: number, lng: number, unit: number): { lat: number; lng: number } {
+  private _getGridUnits(unitM: number): { latUnit: number; lngUnit: number } {
+    // 常に unit=1 で呼び出す（unitList 最小値 = 1m）
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const raw = (Encode as any).GridLine(lat, lng, unit, 4);
+    const raw = (Encode as any).GridLine(AKASHI_LAT, AKASHI_LNG, 1, 4);
     const { grid } = JSON.parse(raw) as { grid: { lats: number[]; lngs: number[] } };
-    const southLines = grid.lats.filter((v: number) => v <= lat);
-    const westLines  = grid.lngs.filter((v: number) => v <= lng);
-    return {
-      lat: southLines.length > 0 ? Math.max(...southLines) : lat,
-      lng: westLines.length  > 0 ? Math.max(...westLines)  : lng,
-    };
+
+    // 1m 相当の度数差を取得
+    const latUnit1 = grid.lats.length >= 2 ? grid.lats[1] - grid.lats[0] : 0.000009;
+    const lngUnit1 = grid.lngs.length >= 2 ? grid.lngs[1] - grid.lngs[0] : 0.000011;
+
+    // unitM 倍して実際のセルサイズに対応する度数差を計算
+    const latUnit = latUnit1 * unitM;
+    const lngUnit = lngUnit1 * unitM;
+
+    console.log(
+      `[GlobalVoxelLayer] GridLine(unit=1)から取得: latUnit1=${latUnit1.toExponential(4)}, lngUnit1=${lngUnit1.toExponential(4)}` +
+      ` → unitM=${unitM} 倍: latUnit=${latUnit.toExponential(4)}, lngUnit=${lngUnit.toExponential(4)}`
+    );
+
+    return { latUnit, lngUnit };
   }
 
-  /** 点群 → ENU グリッドキー "ie:in:iu" の VoxelSnapshot */
+  /** 点群 → WGS84グリッドキー "ilat:ilng:ialt" の VoxelSnapshot */
   private _buildSnapshot(points: PointData[], frameId: number): VoxelSnapshot {
     const cells = new Map<VoxelKey, VoxelState>();
 
@@ -113,14 +132,11 @@ export class GlobalVoxelLayer implements RenderLayer {
       // センサーローカル → WGS84 (Z は下向きなので反転)
       const wgs84 = this._sensorTransformer.transformPoint(p.x, p.y, -p.z);
 
-      // WGS84 → ENU from グリッド原点 (heading=90 → R_sensor=I → x=E, y=N, z=U)
-      const enu = this._gridTransformer.inverseTransformPoint(wgs84.lat, wgs84.lng, wgs84.alt);
-
-      // unitM グリッドにスナップ
-      const ie  = Math.floor(enu.x / this._unitM);
-      const in_ = Math.floor(enu.y / this._unitM);
-      const iu  = Math.floor(enu.z / this._unitM);
-      const key: VoxelKey = `${ie}:${in_}:${iu}`;
+      // WGS84グリッド単位でスナップ（GridLine()の度数差を使用）
+      const ilat = Math.floor(wgs84.lat / this._latUnit);
+      const ilng = Math.floor(wgs84.lng / this._lngUnit);
+      const ialt = Math.floor(wgs84.alt / this._unitM);
+      const key: VoxelKey = `${ilat}:${ilng}:${ialt}`;
 
       const existing = cells.get(key);
       if (existing) {

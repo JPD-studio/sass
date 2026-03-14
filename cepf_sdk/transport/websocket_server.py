@@ -79,12 +79,15 @@ class WebSocketTransport(TransportBase):
     async def _handler(self, websocket: ServerConnection) -> None:
         """新規クライアント接続ハンドラー。切断まで待機する。"""
         self._clients.add(websocket)
-        logger.debug("WebSocketTransport: client connected (%d total)", len(self._clients))
+        remote = getattr(websocket, 'remote_address', 'unknown')
+        logger.info("WebSocketTransport: client connected from %s (%d total)", remote, len(self._clients))
         try:
             await websocket.wait_closed()
+        except Exception as e:
+            logger.warning("WebSocketTransport: client handler exception: %s", e)
         finally:
             self._clients.discard(websocket)
-            logger.debug("WebSocketTransport: client disconnected (%d total)", len(self._clients))
+            logger.info("WebSocketTransport: client disconnected from %s (%d total)", remote, len(self._clients))
 
     @staticmethod
     def _frame_to_json(frame: CepfFrame) -> str:

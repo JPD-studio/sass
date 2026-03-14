@@ -139,8 +139,10 @@ function resolveWsUrl(config: ViewerConfig): string {
     // 右: グローバルボクセル
     dispRight.register(new PointCloudLayer(viewerRight));
     const mount = buildMount(config);
+    let globalVoxelLayer: GlobalVoxelLayer | null = null;
     if (mount) {
-      dispRight.register(new GlobalVoxelLayer(viewerRight, mount, unitM, gridMode));
+      globalVoxelLayer = new GlobalVoxelLayer(viewerRight, mount, unitM, gridMode);
+      dispRight.register(globalVoxelLayer);
     } else {
       dispRight.register(new VoxelLayer(viewerRight, cellSize));
       console.warn("[viewer] both モードで mount 未設定: 右ペインをローカルモードで代替");
@@ -152,6 +154,18 @@ function resolveWsUrl(config: ViewerConfig): string {
       dispLeft.dispatch(points);
       dispRight.dispatch(points);
       setStatus("接続済み ✓", dispLeft.frameId, points.length);
+
+      // グローバルボクセルの寸法をデバッグ表示
+      if (globalVoxelLayer) {
+        const dim = globalVoxelLayer.getLastVoxelDimensions();
+        if (dim) {
+          const el = document.getElementById("voxel-dimensions");
+          if (el) {
+            el.textContent = `Global Voxel: EW=${dim.east.toFixed(4)}m NS=${dim.north.toFixed(4)}m UD=${dim.up.toFixed(4)}m U=${dim.up}`;
+            el.style.display = "block";
+          }
+        }
+      }
     });
 
     viewerLeft.render();
@@ -167,13 +181,15 @@ function resolveWsUrl(config: ViewerConfig): string {
 
     const viewer     = new ViewerApp(container, config.coin);
     const dispatcher = new FrameDispatcher();
+    let globalVoxelLayer: GlobalVoxelLayer | null = null;
 
     dispatcher.register(new PointCloudLayer(viewer));
 
     if (voxelMode === "global") {
       const mount = buildMount(config);
       if (mount) {
-        dispatcher.register(new GlobalVoxelLayer(viewer, mount, unitM, gridMode));
+        globalVoxelLayer = new GlobalVoxelLayer(viewer, mount, unitM, gridMode);
+        dispatcher.register(globalVoxelLayer);
         console.log(`[viewer] グローバルモード: unit=${unitM}m, grid=${gridMode}, mount=(${mount.position.lat}, ${mount.position.lng})`);
       } else {
         dispatcher.register(new VoxelLayer(viewer, cellSize));
@@ -190,6 +206,18 @@ function resolveWsUrl(config: ViewerConfig): string {
     conn.onMessage((points) => {
       dispatcher.dispatch(points);
       setStatus("接続済み ✓", dispatcher.frameId, points.length);
+
+      // グローバルボクセルの寸法をデバッグ表示
+      if (globalVoxelLayer) {
+        const dim = globalVoxelLayer.getLastVoxelDimensions();
+        if (dim) {
+          const el = document.getElementById("voxel-dimensions");
+          if (el) {
+            el.textContent = `Global Voxel: EW=${dim.east.toFixed(4)}m NS=${dim.north.toFixed(4)}m UD=${dim.up.toFixed(4)}m U=${dim.up}`;
+            el.style.display = "block";
+          }
+        }
+      }
     });
 
     viewer.render();
