@@ -1,0 +1,117 @@
+[1;33m  既存プロセスはありません。そのまま起動します。[0m
+
+[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;34m  ステップ 0: 前提条件チェック[0m
+[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+  [0;32m✓[0m python3 /usr/bin/python3
+  [0;32m✓[0m pip3 /home/jetson/.local/bin/pip3
+  [0;32m✓[0m node /home/jetson/.nvm/versions/node/v20.20.0/bin/node
+  [0;32m✓[0m npm /home/jetson/.nvm/versions/node/v20.20.0/bin/npm
+  [0;32m✓[0m Python 3.10.12
+  [0;32m✓[0m Node   v20.20.0
+  [0;32m✓[0m npm    10.8.2
+
+[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;34m  ステップ 1: Python SDK インストール (cepf_sdk)[0m
+[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+  [0;32m✓[0m cepf_sdk は既にインストール済みです
+  [0;32m✓[0m dpkt は既にインストール済みです
+
+[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;34m  ステップ 2: TypeScript ライブラリ ビルド[0m
+[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+  [0;36m→[0m ws-client: npm install...
+  [0;36m→[0m ws-client: npm run build...
+  [0;32m✓[0m ws-client ビルド完了
+  [0;36m→[0m voxel: npm install...
+  [0;36m→[0m voxel: npm run build...
+  [0;32m✓[0m voxel ビルド完了
+  [0;36m→[0m detector: npm install...
+  [0;36m→[0m detector: npm run build...
+  [0;32m✓[0m detector ビルド完了
+
+[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;34m  ステップ 2b: spatial-grid ビルド[0m
+[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+  [0;36m→[0m spatial-grid: npm install...
+  [0;36m→[0m spatial-grid: npm run build...
+  [0;32m✓[0m spatial-grid ビルド完了
+
+[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;34m  ステップ 3: Viewer バンドル[0m
+[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+  [0;36m→[0m viewer: npm install...
+  [0;36m→[0m viewer: webpack バンドル中...
+      ../spatial-grid/src/euler-quaternion.ts 2.98 KiB [built] [code generated]
+    ../voxel/src/voxel-grid.ts 911 bytes [built] [code generated]
+webpack 5.105.4 compiled successfully in 8268 ms
+  [0;32m✓[0m viewer バンドル完了 → viewer/dist/bundle.js
+
+[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;34m  ステップ 3b: Geo-Viewer バンドル (CesiumJS)[0m
+[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+  [0;36m→[0m geo-viewer: npm install...
+  [0;36m→[0m geo-viewer: webpack バンドル中 (CesiumJS は初回に時間がかかります)...
+modules by path ./node_modules/nosleep.js/src/*.js 16.3 KiB 2 modules
++ 12 modules
+webpack 5.105.4 compiled successfully in 16948 ms
+  [0;32m✓[0m geo-viewer バンドル完了 → geo-viewer/dist/bundle.js
+
+[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;34m  ステップ 4: apps_ts 依存インストール[0m
+[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+  [0;36m→[0m apps_ts: npm install...
+  [0;32m✓[0m apps_ts 依存インストール完了
+
+[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;34m  ステップ 5: PCAP リプレイ起動 (WebSocket :8765)[0m
+[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+  [0;36m→[0m Ouster PCAP リプレイ: pcap/250808sbir_20250808133236_00001.pcap
+  [0;32m✓[0m Ouster PCAP リプレイ起動 (PID 20836, verbose mode)
+  [0;36m→[0m WebSocket サーバー (ポート 8765) の起動を待機中...
+  [0;32m✓[0m WebSocket サーバーがポート 8765 で起動しました
+
+[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;34m  ステップ 6: Viewer 起動 (HTTP :3000)[0m
+[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+  [0;32m✓[0m viewer/config.json は既に存在します（保護されます）
+  [0;32m✓[0m Viewer 起動完了 (PID 20865)
+  [0;36m→[0m ブラウザで開く: [0;32mhttp://localhost:3000[0m
+
+[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;34m  ステップ 6b: Geo-Viewer 起動 (CesiumJS HTTP :3001)[0m
+[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+  [0;32m✓[0m geo-viewer/config.json は既に存在します（保護されます）
+  [0;32m✓[0m Geo-Viewer 起動完了 (PID 20902)
+  [0;36m→[0m ブラウザで開く: [0;32mhttp://localhost:3001[0m
+
+[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;34m  ステップ 7: Detector 起動 (ヘッドレス侵入検知)[0m
+[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+  [0;32m✓[0m apps_ts/sensors.json が既に存在します
+  [0;32m✓[0m Detector 起動 (PID 20957)
+  [0;36m→[0m ログ: /home/jetson/repos/sass/.logs/detector.log
+
+[0;32m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;32m  SASS 起動完了![0m
+[0;32m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+  [0;36mWebSocket[0m   ws://0.0.0.0:8765
+  [0;36mViewer[0m      http://localhost:3000   (Three.js)
+  [0;36mGeo-Viewer[0m  http://localhost:3001  (CesiumJS)
+  [0;36mDetector[0m    ヘッドレスモード (ログ: .logs/detector.log)
+
+  ログディレクトリ: [1;33m/home/jetson/repos/sass/.logs/[0m
+  停止するには:     [1;33mCtrl+C[0m または [1;33m./start.sh --stop[0m
+
+Terminated
+Terminated
+Terminated
+  [0;31m✗[0m pcap_replay プロセスが終了しました。ログを確認: /home/jetson/repos/sass/.logs/pcap_replay.log
+
+
+[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;34m  シャットダウン[0m
+[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+[0;32m全プロセスを停止しました。[0m

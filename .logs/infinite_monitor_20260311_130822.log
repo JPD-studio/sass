@@ -1,0 +1,67 @@
+=== 無限監視開始 ===
+Ctrl+C で停止してください
+監視ログ: .logs/infinite_monitor_20260311_130822.log
+
+[2026-03-11 13:08:22|#1] PCAP=✓(20838|81MB|CPU90.7%|6th|FDs=10) | WS_LISTEN=1 | Errors=0 | Frames=28217 | Passes=203 | Clients=4
+[2026-03-11 13:08:52|#2] PCAP=✓(20838|81MB|CPU90.7%|6th|FDs=10) | WS_LISTEN=1 | Errors=0 | Frames=28356 | Passes=204 | Clients=4
+[2026-03-11 13:09:23|#3] PCAP=✓(20838|81MB|CPU90.8%|6th|FDs=10) | WS_LISTEN=1 | Errors=0 | Frames=28495 | Passes=205 | Clients=4
+[2026-03-11 13:09:53|#4] PCAP=✓(20838|81MB|CPU90.8%|6th|FDs=10) | WS_LISTEN=1 | Errors= | Frames= | Passes=206 | Clients=4
+[🟡 INFO] WebSocket送信エラー検出: 
+[2026-03-11 13:10:23|#5] PCAP=✓(20838|80MB|CPU90.8%|6th|FDs=10) | WS_LISTEN=1 | Errors= | Frames= | Passes=207 | Clients=4
+[🟡 INFO] WebSocket送信エラー検出: 
+[2026-03-11 13:10:53|#6] PCAP=✓(20838|72MB|CPU90.8%|6th|FDs=9) | WS_LISTEN=1 | Errors=0 | Frames=29051 | Passes=209 | Clients=4
+[2026-03-11 13:11:23|#7] PCAP=✓(20838|81MB|CPU90.8%|6th|FDs=10) | WS_LISTEN=1 | Errors=0 | Frames=29190 | Passes=210 | Clients=4
+[2026-03-11 13:11:53|#8] PCAP=✓(20838|81MB|CPU90.8%|6th|FDs=10) | WS_LISTEN=1 | Errors=0 | Frames=29329 | Passes=211 | Clients=4
+[2026-03-11 13:12:24|#9] PCAP=✓(20838|80MB|CPU90.8%|6th|FDs=10) | WS_LISTEN=1 | Errors=0 | Frames=29468 | Passes=212 | Clients=4
+[2026-03-11 13:12:54|#10] PCAP=✓(20838|81MB|CPU90.8%|6th|FDs=10) | WS_LISTEN=1 | Errors=0 | Frames=29607 | Passes=213 | Clients=4
+[2026-03-11 13:13:24|#11] PCAP=✓(20838|81MB|CPU90.8%|6th|FDs=10) | WS_LISTEN=1 | Errors= | Frames= | Passes=214 | Clients=4
+[🟡 INFO] WebSocket送信エラー検出: 
+[2026-03-11 13:13:54|#12] PCAP=✓(20838|81MB|CPU90.8%|6th|FDs=10) | WS_LISTEN=1 | Errors= | Frames= | Passes=215 | Clients=4
+[🟡 INFO] WebSocket送信エラー検出: 
+[2026-03-11 13:14:24|#13] PCAP=✓(20838|72MB|CPU90.8%|6th|FDs=9) | WS_LISTEN=1 | Errors=0 | Frames=30163 | Passes=217 | Clients=4
+[2026-03-11 13:14:54|#14] PCAP=✓(20838|81MB|CPU90.8%|6th|FDs=10) | WS_LISTEN=1 | Errors=0 | Frames=30302 | Passes=218 | Clients=4
+[2026-03-11 13:15:24|#15] PCAP=✓(20838|81MB|CPU90.8%|6th|FDs=10) | WS_LISTEN=1 | Errors=0 | Frames=30441 | Passes=219 | Clients=4
+[2026-03-11 13:15:55|#16] PCAP=✓(20838|81MB|CPU90.8%|6th|FDs=10) | WS_LISTEN=1 | Errors=0 | Frames=30580 | Passes=220 | Clients=4
+[2026-03-11 13:16:25|#17] PCAP=✓(20838|81MB|CPU90.9%|6th|FDs=10) | WS_LISTEN=1 | Errors=0 | Frames=30719 | Passes=221 | Clients=4
+[2026-03-11 13:16:55|#18] PCAP=✓(20838|81MB|CPU90.9%|6th|FDs=10) | WS_LISTEN=1 | Errors= | Frames= | Passes=222 | Clients=4
+[🟡 INFO] WebSocket送信エラー検出: 
+[2026-03-11 13:17:25|#19] PCAP=✓(20838|81MB|CPU90.9%|6th|FDs=11) | WS_LISTEN=1 | Errors= | Frames= | Passes=223 | Clients=5
+[🟡 INFO] WebSocket送信エラー検出: 
+[2026-03-11 13:17:55|#20] PCAP=✓(20838|81MB|CPU90.9%|6th|FDs=11) | WS_LISTEN=1 | Errors= | Frames= | Passes=224 | Clients=5
+[🟡 INFO] WebSocket送信エラー検出: 
+[2026-03-11 13:18:25|#21] PCAP=✓(20838|81MB|CPU90.9%|6th|FDs=10) | WS_LISTEN=1 | Errors= | Frames= | Passes=225 | Clients=5
+[🟡 INFO] WebSocket送信エラー検出: 
+[2026-03-11 13:18:56|#22] PCAP=✓(20838|72MB|CPU90.9%|6th|FDs=9) | WS_LISTEN=1 | Errors=0 | Frames=31553 | Passes=227 | Clients=5
+[2026-03-11 13:19:26|#23] PCAP=✓(20838|81MB|CPU90.9%|6th|FDs=10) | WS_LISTEN=1 | Errors=0 | Frames=31692 | Passes=228 | Clients=5
+[2026-03-11 13:19:56|#24] PCAP=✓(20838|81MB|CPU90.9%|6th|FDs=10) | WS_LISTEN=1 | Errors=0 | Frames=31831 | Passes=229 | Clients=5
+[2026-03-11 13:20:26|#25] PCAP=✓(20838|81MB|CPU90.9%|6th|FDs=10) | WS_LISTEN=1 | Errors=0 | Frames=31970 | Passes=230 | Clients=5
+[2026-03-11 13:20:56|#26] PCAP=✓(20838|81MB|CPU90.9%|6th|FDs=10) | WS_LISTEN=1 | Errors=0 | Frames=32109 | Passes=231 | Clients=5
+[2026-03-11 13:21:26|#27] PCAP=✓(20838|81MB|CPU90.9%|6th|FDs=10) | WS_LISTEN=1 | Errors= | Frames= | Passes=232 | Clients=5
+[🟡 INFO] WebSocket送信エラー検出: 
+[2026-03-11 13:21:57|#28] PCAP=✓(20838|81MB|CPU90.9%|6th|FDs=10) | WS_LISTEN=1 | Errors= | Frames= | Passes=233 | Clients=5
+[🟡 INFO] WebSocket送信エラー検出: 
+[2026-03-11 13:22:27|#29] PCAP=✓(20838|72MB|CPU90.9%|6th|FDs=9) | WS_LISTEN=1 | Errors=0 | Frames=32665 | Passes=235 | Clients=5
+[2026-03-11 13:22:57|#30] PCAP=✓(20838|81MB|CPU90.9%|6th|FDs=10) | WS_LISTEN=1 | Errors=0 | Frames=32804 | Passes=236 | Clients=5
+[2026-03-11 13:23:27|#31] PCAP=✓(20838|81MB|CPU90.9%|6th|FDs=10) | WS_LISTEN=1 | Errors=0 | Frames=32943 | Passes=237 | Clients=5
+[2026-03-11 13:23:57|#32] PCAP=✓(20838|81MB|CPU91.0%|6th|FDs=10) | WS_LISTEN=1 | Errors=0 | Frames=33082 | Passes=238 | Clients=5
+[2026-03-11 13:24:27|#33] PCAP=✓(20838|81MB|CPU91.0%|6th|FDs=10) | WS_LISTEN=1 | Errors=0 | Frames=33221 | Passes=239 | Clients=5
+[2026-03-11 13:24:57|#34] PCAP=✓(20838|81MB|CPU91.0%|6th|FDs=10) | WS_LISTEN=1 | Errors= | Frames= | Passes=240 | Clients=5
+[🟡 INFO] WebSocket送信エラー検出: 
+[2026-03-11 13:25:28|#35] PCAP=✓(20838|81MB|CPU91.0%|6th|FDs=9) | WS_LISTEN=1 | Errors= | Frames= | Passes=241 | Clients=5
+[🟡 INFO] WebSocket送信エラー検出: 
+[2026-03-11 13:25:58|#36] PCAP=✓(20838|81MB|CPU91.0%|6th|FDs=10) | WS_LISTEN=1 | Errors=0 | Frames=33777 | Passes=243 | Clients=5
+[2026-03-11 13:26:28|#37] PCAP=✓(20838|81MB|CPU91.0%|6th|FDs=10) | WS_LISTEN=1 | Errors=0 | Frames=33916 | Passes=244 | Clients=6
+[2026-03-11 13:26:58|#38] PCAP=✓(20838|81MB|CPU91.0%|6th|FDs=10) | WS_LISTEN=1 | Errors=0 | Frames=34055 | Passes=245 | Clients=6
+[2026-03-11 13:27:28|#39] PCAP=✓(20838|81MB|CPU91.0%|6th|FDs=10) | WS_LISTEN=1 | Errors= | Frames= | Passes=246 | Clients=6
+[🟡 INFO] WebSocket送信エラー検出: 
+[2026-03-11 13:27:58|#40] PCAP=✓(20838|81MB|CPU91.0%|6th|FDs=10) | WS_LISTEN=1 | Errors= | Frames= | Passes=247 | Clients=6
+[🟡 INFO] WebSocket送信エラー検出: 
+[2026-03-11 13:28:29|#41] PCAP=✓(20838|72MB|CPU91.0%|6th|FDs=9) | WS_LISTEN=1 | Errors=0 | Frames=34611 | Passes=249 | Clients=6
+[2026-03-11 13:28:59|#42] PCAP=✓(20838|81MB|CPU91.0%|6th|FDs=10) | WS_LISTEN=1 | Errors=0 | Frames=34750 | Passes=250 | Clients=6
+[2026-03-11 13:29:29|#43] PCAP=✓(20838|81MB|CPU91.0%|6th|FDs=10) | WS_LISTEN=1 | Errors=0 | Frames=34889 | Passes=251 | Clients=6
+[2026-03-11 13:29:59|#44] PCAP=✓(20838|81MB|CPU91.0%|6th|FDs=10) | WS_LISTEN=1 | Errors=0 | Frames=35028 | Passes=252 | Clients=6
+[2026-03-11 13:30:29|#45] PCAP=✗(DEAD|0MB|CPU0%|?th|FDs=0) | WS_LISTEN=0 | Errors=0 | Frames=35167 | Passes=253 | Clients=6
+[🔴 CRITICAL] PCAPプロセスが停止しました! Wed Mar 11 01:30:29 PM JST 2026
+[🟠 WARNING] WebSocketポートがリッスンしていません
+
+[🔴 STOP] 異常が連続で検出されたため監視を終了します

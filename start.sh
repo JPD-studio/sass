@@ -4,11 +4,11 @@
 # =============================================================================
 #
 #  使い方:
-#    ./start.sh                 # デフォルト: 全コンポーネント起動
+#    ./start.sh                 # デフォルト: Viewer スプリット画面 (Geo-Viewer スキップ)
 #    ./start.sh --no-detector   # Detector なしで起動
 #    ./start.sh --no-viewer     # Viewer なしで起動
-#    ./start.sh --no-geo-viewer # Geo-Viewer なしで起動
-#    ./start.sh --split-view    # Viewer を左右分割 (local|global) で起動
+#    ./start.sh --geo-viewer    # Geo-Viewer も起動
+#    ./start.sh --single-view   # Viewer 単画面で起動
 #    ./start.sh --install-only  # 依存関係インストールのみ (起動しない)
 #    ./start.sh --restart       # 既存プロセスをキルしてクリーン再起動
 #    ./start.sh --stop          # 起動中のプロセスを停止
@@ -51,10 +51,10 @@ NC='\033[0m' # No Color
 
 # フラグ
 RUN_VIEWER=true
-RUN_GEO_VIEWER=true
+RUN_GEO_VIEWER=false
 RUN_DETECTOR=true
 INSTALL_ONLY=false
-VIEWER_SPLIT=false
+VIEWER_SPLIT=true
 
 # ──────────────────────────────────────────────────────────────────────────────
 #  引数パース
@@ -62,9 +62,9 @@ VIEWER_SPLIT=false
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --no-viewer)      RUN_VIEWER=false;     shift ;;
-        --no-geo-viewer)  RUN_GEO_VIEWER=false; shift ;;
+        --geo-viewer)     RUN_GEO_VIEWER=true;  shift ;;
         --no-detector)    RUN_DETECTOR=false;   shift ;;
-        --split-view)     VIEWER_SPLIT=true;    shift ;;
+        --single-view)    VIEWER_SPLIT=false;   shift ;;
         --install-only)   INSTALL_ONLY=true;    shift ;;
         --restart)
             # 既存プロセスをキルして再起動

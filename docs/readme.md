@@ -13,6 +13,7 @@
 1. [プロジェクト概要](#1-プロジェクト概要)
 2. [リポジトリ構成](#2-リポジトリ構成)
 3. [セットアップ](#3-セットアップ)
+   - [3.6 統合起動スクリプト（start.sh）](#36-統合起動スクリプトstartsh)
 4. [コアアーキテクチャ（Python）](#4-コアアーキテクチャpython)
 5. [データストリーミングアーキテクチャ](#5-データストリーミングアーキテクチャ)
 6. [API リファレンス](#6-api-リファレンス)
@@ -61,6 +62,10 @@ sass/
 │   ├── errors.py                #   例外階層（9 種）
 │   ├── types.py                 #   CepfPoints 型エイリアス
 │   │
+│   ├── airy/                    #   Airy LiDAR デコーダー
+│   │   ├── __init__.py
+│   │   └── decoder.py
+│   │
 │   ├── drivers/                 #   センサー固有バイナリ解析（CepfFrame 非依存）
 │   │   └── robosense_airy_driver.py
 │   │
@@ -69,11 +74,11 @@ sass/
 │   │   ├── robosense_airy.py    #     RoboSense Airy
 │   │   ├── ouster.py            #     Ouster OS シリーズ（ouster-sdk 依存）
 │   │   ├── ouster_dome128.py    #     Ouster Dome 128
-│   │   ├── velodyne.py          #     Velodyne VLP-16 / VLP-32C
+│   │   ├── velodyne.py          #     Velodyne VLP-16 / VLP-32C / HDL-32E
 │   │   ├── ti_radar.py          #     TI AWR1843 / IWR6843
 │   │   └── continental.py       #     Continental ARS（スタブ）
 │   │
-│   ├── filters/                 #   点群フィルタリング（14 種）
+│   ├── filters/                 #   点群フィルタリング（13 種）
 │   │   ├── base.py              #     FilterMode, PointFilter ABC
 │   │   ├── pipeline.py          #     FilterPipeline（複数フィルター順次適用）
 │   │   ├── range/               #     領域カット系（5 種）
@@ -91,7 +96,7 @@ sass/
 │       ├── quaternion.py        #     回転行列
 │       └── io.py                #     CEPF ファイル I/O
 │
-├── tests/                       # pytest テスト群（156 テスト）
+├── tests/                       # pytest テスト群（143 テスト）
 │   ├── test_frame.py
 │   ├── test_enums.py
 │   ├── test_usc.py
@@ -103,11 +108,15 @@ sass/
 ├── apps/                        # Python アプリケーション層
 │   ├── run_pipeline.py          #   エントリーポイント（argparse）
 │   ├── processor.py             #   FrameProcessor ハンドラー管理
-│   └── sensors.example.json    #   センサー設定テンプレート
+│   ├── pcap_replay.py           #   PCAP リプレイ（Velodyne/Ouster 汎用）
+│   ├── ouster_pcap_replay.py    #   Ouster PCAP リプレイ（ouster-sdk + IP フラグメント対応）
+│   ├── generate_demo_pcap.py    #   テスト用 Velodyne PCAP 生成ツール
+│   └── sensors.example.json     #   センサー設定テンプレート
 │
 ├── ws-client/                   # TS: WebSocket クライアント
 │   └── src/
-│       ├── ws-connection.ts     #   WsConnection（コールバック・AsyncIterator）
+│       ├── ws-connection.ts     #   WsConnection（ブラウザ & Node.js 自動切替）
+│       ├── ws-connection-node.ts #   Node.js 専用 WebSocket 実装
 │       ├── point-stream.ts      #   PointStream（マルチソース）
 │       ├── types.ts             #   ConnectionConfig, PointData 等
 │       └── index.ts
@@ -117,7 +126,7 @@ sass/
 │       ├── voxel-grid.ts        #   VoxelGrid（3D グリッド化）
 │       ├── background-voxel-map.ts  # BackgroundVoxelMap（指数移動平均）
 │       ├── voxel-diff.ts        #   computeDiff（背景差分計算）
-│       ├── spatial-id-converter.ts  # 空間ID変換（スタブ）
+│       ├── spatial-id-converter.ts  # 空間ID変換（BigInt ベース）
 │       ├── types.ts             #   VoxelKey, VoxelSnapshot 等
 │       └── index.ts
 │
@@ -132,33 +141,77 @@ sass/
 │       │   └── adaptive-stddev.ts      # 標準偏差ベース適応閾値
 │       └── index.ts
 │
-├── viewer/                      # TS: Three.js 3D ビューワー
+├── viewer/                      # TS: Three.js 3D ビューワー（port:3000）
 │   ├── index.html
 │   └── src/
 │       ├── index.ts             #   ViewerApp クラス
+│       ├── main.ts              #   ブラウザエントリーポイント（voxel_mode 分岐）
+│       ├── stats.ts             #   パフォーマンス計測
+│       ├── layers/              #   描画レイヤー管理
+│       │   ├── index.ts
+│       │   ├── types.ts         #     RenderLayer interface
+│       │   ├── frame-dispatcher.ts  # フレーム分配
+│       │   ├── point-cloud-layer.ts  # 点群描画レイヤー
+│       │   ├── voxel-layer.ts       # ローカルボクセルレイヤー
+│       │   ├── global-voxel-layer.ts # グローバル（WGS84）ボクセルレイヤー
+│       │   ├── range-wireframe-layer.ts  # フィルター領域ワイヤーフレーム描画
+│       │   └── range-filter-config.ts   # フィルター形状定義
 │       ├── renderers/
-│       │   ├── voxel-renderer.ts    # InstancedMesh（最大 100,000 ボクセル）
+│       │   ├── voxel-renderer.ts         # InstancedMesh（最大 100,000 ボクセル）
+│       │   ├── global-voxel-renderer.ts  # WGS84 グリッドレンダラー
 │       │   └── spatial-id-renderer.ts
 │       └── overlays/
 │           ├── drone-sprite.ts
-│           └── intrusion-highlight.ts
+│           ├── intrusion-highlight.ts
+│           └── layer-panel.ts   #   レイヤー表示切替 UI
+│
+├── geo-viewer/                  # TS: CesiumJS 地図ビューワー（port:3001）
+│   ├── index.html
+│   ├── config.json              #   WebSocket URL・設置位置（lat/lng/alt）・姿勢
+│   └── src/
+│       ├── main.ts              #   CesiumJS エントリーポイント（Google 3D Tiles）
+│       ├── point-cloud-layer.ts #   Cesium 点群描画レイヤー
+│       └── types.ts             #   GeoViewerConfig
+│
+├── spatial-grid/                # TS: 座標変換・空間ユーティリティ
+│   └── src/
+│       ├── index.ts
+│       ├── types.ts             #   SensorMount, MountPosition, MountOrientation
+│       ├── coordinate-transform.ts  # WGS84 ⇔ ECEF ⇔ ローカル変換
+│       ├── euler-quaternion.ts  #   オイラー角 ⇔ 四元数変換
+│       └── spatial-id-converter.ts  # グリッド座標マッピング
 │
 ├── apps_ts/                     # TS: アプリケーションエントリーポイント
 │   ├── src/
 │   │   ├── main-viewer.ts       #   ブラウザビューワー起動
-│   │   └── main-detector.ts     #   ヘッドレス検知起動
-│   └── sensors.example.json    #   TS 側センサー設定テンプレート
+│   │   ├── main-detector.ts     #   ヘッドレス検知起動（AsyncGenerator）
+│   │   ├── main-detector-nodejs.ts  # Node.js 専用検知（ws 直接使用）
+│   │   ├── main-detector-debug.ts   # デバッグ版検知（接続状態・フレーム数ログ）
+│   │   └── simple-ws-test.ts    #   WebSocket 基本接続テスト
+│   ├── sensors.json             #   TS 側センサー設定（実運用）
+│   └── sensors.example.json     #   TS 側センサー設定テンプレート
 │
 ├── vendor/                      # 空間ID TypeScript ライブラリ（変更禁止）
-│   └── alogs/                   #   Encode.js / Decode.js (CJS)
+│   ├── alogs/                   #   CEex / Encode / Decode (CJS)
+│   ├── models/                  #   LatLng / Model 型定義
+│   ├── util/                    #   HitTest / Util ユーティリティ
+│   └── docs/                    #   README
+│
+├── pcap/                        # PCAP データファイル
+│   └── 250808sbir_*.pcap        #   Ouster OS1-128 サンプルデータ
 │
 ├── docs/                        # ドキュメント
-│   ├── readme.md                #   ← 本ファイル
 │   ├── CEPF_USC_Specification_v1_4.md
 │   ├── cepf-sdk-refactoring-guide.md
-│   └── implementation-log.md
+│   ├── implementation-log.md
+│   ├── implementation-roadmap.md
+│   ├── phase2b-3a-implementation.md
+│   └── websocket-stream-failure-investigation.md
 │
-└── pyproject.toml
+├── start.sh                     # 統合起動スクリプト（PCAP → WS → Viewer → Geo-Viewer → Detector）
+├── pyproject.toml
+├── run_tests.py                 # pytest 未インストール時の簡易テストランナー
+└── demo.pcap                    # デモ用 PCAP ファイル
 ```
 
 ---
@@ -197,6 +250,8 @@ cd ws-client  && npm install
 cd ../voxel   && npm install
 cd ../detector && npm install
 cd ../viewer  && npm install
+cd ../geo-viewer && npm install
+cd ../spatial-grid && npm install
 cd ../apps_ts && npm install
 ```
 
@@ -210,6 +265,83 @@ cd ../apps_ts && npm install
 | ouster-sdk >= 0.13 | Ouster センサーパーサー | 任意 |
 | laspy | LAS ファイル出力 | 任意 |
 | pytest | テスト実行 | 開発時 |
+
+### 3.6 統合起動スクリプト（start.sh）
+
+本リポジトリには、SASS 全コンポーネントを一括起動する統合スクリプト `start.sh` が用意されています。
+
+#### 基本的な使い方
+
+**デフォルト起動（推奨）:**
+```bash
+./start.sh
+```
+
+**実行内容:**
+- WebSocket サーバー（`ws://0.0.0.0:8765`）
+- Viewer：スプリット画面（Three.js デュアルビューワー）
+  - 左：ローカルボクセルレイヤー
+  - 右：グローバルボクセルレイヤー（WGS84）
+- Detector：ヘッドレス侵入検知エンジン
+- Geo-Viewer：**スキップ**（CesiumJS バンドルは時間がかかるため）
+
+#### コマンドラインオプション
+
+| コマンド | 説明 |
+|---------|------|
+| `./start.sh` | デフォルト: Viewer スプリット画面 (Geo-Viewer スキップ) |
+| `./start.sh --geo-viewer` | Geo-Viewer（CesiumJS 地図ビューワー）も起動 |
+| `./start.sh --single-view` | Viewer 単画面（ローカルボクセルのみ）で起動 |
+| `./start.sh --no-detector` | Detector なしで起動 |
+| `./start.sh --no-viewer` | Viewer なしで起動 |
+| `./start.sh --install-only` | 依存関係インストールのみ（起動しない） |
+| `./start.sh --restart` | 既存プロセスをキルしてクリーン再起動 |
+| `./start.sh --stop` | 起動中のプロセスを停止（または Ctrl+C） |
+
+#### 環境変数で PCAP 設定（カスタマイズ）
+
+```bash
+# デフォルト PCAP ファイルを変更
+export SASS_PCAP=/path/to/your/file.pcap
+export SASS_PCAP_META=/path/to/your/metadata.json
+
+# 再生速度を指定（1.0=実時間, 0=最速, 2.0=2倍速）
+export SASS_PCAP_RATE=2.0
+
+./start.sh
+```
+
+#### データフロー
+
+```
+PCAP ──▶ Python パーサー ──▶ WebSocket (ws://0.0.0.0:8765)
+                                 ├──▶ Viewer スプリット (http://localhost:3000) [Three.js]
+                                 └──▶ Detector        (ヘッドレス侵入検知)
+```
+
+#### ログの確認
+
+```bash
+# WebSocket / PCAP リプレイのログ
+tail -f .logs/pcap_replay.log
+
+# Viewer（ブラウザ） の WebSocket 受信ログ
+tail -f .logs/viewer.log
+
+# Detector（検知エンジン） のログ
+tail -f .logs/detector.log
+
+# すべてのログ確認
+tail -f .logs/*.log
+```
+
+#### ポート一覧
+
+| サービス | ポート | 説明 |
+|---------|--------|------|
+| WebSocket | 8765 | PCAP から送信される点群フレーム |
+| Viewer (HTTP) | 3000 | Three.js ビューワー（ブラウザ） |
+| Geo-Viewer (HTTP) | 3001 | CesiumJS 地図ビューワー（`--geo-viewer` 指定時のみ） |
 
 ---
 
@@ -242,7 +374,7 @@ cd ../apps_ts && npm install
            │ extensions    │  ← センサー固有拡張データ
            └──────────────┘
                     ↓
-             FilterPipeline（14 種のフィルター）
+             FilterPipeline（13 種のフィルター）
                     ↓
              transport/
              ├── WebSocketTransport（asyncio ブロードキャスト）
@@ -290,7 +422,7 @@ flowchart TD
       C["sensor別パーサー<br>CepfFrame v1.40 生成"]
     end
     D["Transform + InstallationInfo<br>座標変換・メタデータ付与"]
-    E["FilterPipeline<br>点群フィルタリング（14種）"]
+    E["FilterPipeline<br>点群フィルタリング（13種）"]
   end
   
   F["transport/<br>WebSocket サーバー (asyncio)"]
@@ -311,6 +443,9 @@ flowchart TD
     H -->|ビューワーパイプライン| I["viewer/<br>Three.js InstancedMesh<br>3D リアルタイム可視化"]
     H -->|検知パイプライン| J["detector/<br>AdaptiveStddev 閾値判定<br>侵入イベント生成"]
     J --> K["mqtt-client<br>(将来実装)<br>ヘッドレス通知"]
+
+    G -->|WGS84 変換| N["spatial-grid/<br>CoordinateTransformer<br>WGS84 ⇔ ECEF ⇔ ローカル"]
+    N --> O["geo-viewer/<br>CesiumJS 地図ビューワー<br>Google 3D Tiles"]
   end
 
   subgraph Apps["apps_ts/ エントリーポイント"]
@@ -319,6 +454,7 @@ flowchart TD
   end
 
   I --> L
+  O --> L
   J --> M
 ```
 
@@ -354,7 +490,9 @@ flowchart TD
 | `ws-client/` | WebSocket 受信・点群ストリーム抽象化 | 8 | ✅ 実装済み |
 | `voxel/` | VoxelGrid・BackgroundVoxelMap・VoxelDiff・空間ID変換 | 26 | ✅ 実装済み |
 | `detector/` | 閾値ストラテジー・侵入検知エンジン | 18 | ✅ 実装済み |
-| `viewer/` | Three.js シーン・InstancedMesh 大量点描画 | 2 + tsc | ✅ 実装済み |
+| `viewer/` | Three.js シーン・レイヤー管理・InstancedMesh 大量点描画 | 21 | ✅ 実装済み |
+| `geo-viewer/` | CesiumJS 地図ビューワー・Google 3D Tiles・WGS84 点群描画 | — | ✅ 実装済み |
+| `spatial-grid/` | WGS84 ⇔ ECEF 座標変換・オイラー角⇔四元数変換 | 25 | ✅ 実装済み |
 | `apps_ts/` | フロントエンド配線・センサー設定読み込み | tsc | ✅ 実装済み |
 | `vendor/` | 空間ID TS ライブラリ（変更禁止） | — | ✅ 組み込み済み |
 
@@ -365,12 +503,14 @@ flowchart TD
 | `drivers/` | ✅ 実装済み |
 | `parsers/` | ✅ 実装済み（Continental はスタブ） |
 | `usc.py` | ✅ 実装済み |
-| `filters/` | ✅ 実装済み（14 種） |
+| `filters/` | ✅ 実装済み（13 種） |
 | `transport/` | ✅ 実装済み |
 | `ws-client/` | ✅ 実装済み |
 | `voxel/` | ✅ 実装済み |
 | `detector/` | ✅ 実装済み |
 | `viewer/` | ✅ 実装済み |
+| `geo-viewer/` | ✅ 実装済み |
+| `spatial-grid/` | ✅ 実装済み |
 
 ---
 
@@ -539,7 +679,7 @@ CEPFError
 | `MASK` | 条件外の点を除去した新フレームを返す |
 | `FLAG` | 条件に合う点にビットフラグを付与する |
 
-### 7.2 フィルター一覧（14 種）
+### 7.2 フィルター一覧（13 種）
 
 | カテゴリ | クラス | 主なパラメータ |
 |---------|--------|-------------|
@@ -772,6 +912,43 @@ viewer.render();                // requestAnimationFrame ループ開始
 viewer.dispose();               // リソース解放
 ```
 
+### 8.5 geo-viewer/
+
+CesiumJS を使用した地図ベースの 3D ビューワーです。Google Photorealistic 3D Tiles と WGS84 座標系での点群オーバーレイを提供します。
+
+```typescript
+// geo-viewer/src/main.ts
+// CesiumJS + Google 3D Tiles による地理空間ビューワー
+// WebSocket で受信した点群を WGS84 座標系で地図上に描画
+// ポート: 3001（viewer の Three.js ビューワーとは別ポート）
+```
+
+**設定ファイル:** `geo-viewer/config.json`
+- `websocket_url`: WebSocket 接続先
+- マウント位置（緯度・経度・高度）
+- 姿勢（heading / pitch / roll）
+
+### 8.6 spatial-grid/
+
+WGS84・ECEF・ローカル座標系間の変換、およびオイラー角・四元数変換を提供するユーティリティパッケージです。
+
+```typescript
+import { CoordinateTransformer, latLngAltToECEF, ecefToLatLngAlt } from "./spatial-grid/src/index.js";
+import { eulerToQuaternion, quaternionToEuler } from "./spatial-grid/src/euler-quaternion.js";
+
+// WGS84 → ECEF 変換
+const ecef = latLngAltToECEF(35.6762, 139.6503, 40.0);
+
+// オイラー角 → 四元数
+const quat = eulerToQuaternion(heading, pitch, roll);
+
+// センサーマウント定義による点群変換
+const transformer = new CoordinateTransformer(sensorMount);
+const worldPoints = transformer.transformPointCloud(localPoints);
+```
+
+**主な型定義:** `SensorMount`, `MountPosition`（lat/lng/alt）, `MountOrientation`（heading/pitch/roll）
+
 ---
 
 ## 9. 対応センサー
@@ -783,6 +960,7 @@ viewer.dispose();               // リソース解放
 | Ouster | Dome 128 | LiDAR | `ouster_dome128` | ✅ 実装済み |
 | Velodyne | VLP-16 | LiDAR | `velodyne` | ✅ 実装済み |
 | Velodyne | VLP-32C | LiDAR | `velodyne` | ✅ 実装済み |
+| Velodyne | HDL-32E | LiDAR | `velodyne` | ✅ 実装済み |
 | Texas Instruments | AWR1843 | Radar | `ti_radar` | ✅ 実装済み |
 | Texas Instruments | IWR6843 | Radar | `ti_radar` | ✅ 実装済み |
 | Continental | ARS シリーズ | Radar | `continental` | 🔲 スタブ |
@@ -872,6 +1050,7 @@ for sensor_cfg in config_dict.get('sensors', []):
 | **RoboSense** | Airy | `robosense_airy` | 16 | 25 | `enabled: false` |
 | **Velodyne** | VLP-16 | `velodyne` | 16 | 100 | `enabled: false` |
 | **Velodyne** | VLP-32C | `velodyne` | 32 | 200 | `enabled: false` |
+| **Velodyne** | HDL-32E | `velodyne` | 32 | 200 | `enabled: false` |
 | **TI** | AWR1843 | `ti_radar` | 1 | 60 | `enabled: false` |
 | **TI** | IWR6843 | `ti_radar` | 1 | 60 | `enabled: false` |
 
@@ -1165,7 +1344,7 @@ _PARSER_MAP = {
 
 ```bash
 cd /home/jetson/repos/sass
-~/.local/bin/pytest tests/ -v                # 全テスト（156 テスト）
+~/.local/bin/pytest tests/ -v                # 全テスト（143 テスト）
 ~/.local/bin/pytest tests/test_parsers/ -v   # パーサーのみ
 ~/.local/bin/pytest tests/test_filters/ -v   # フィルターのみ
 ~/.local/bin/pytest tests/test_transport/ -v # トランスポートのみ
@@ -1179,19 +1358,21 @@ export NVM_DIR="/home/jetson/.nvm" && . /home/jetson/.nvm/nvm.sh
 cd ws-client  && npm test   #  8 テスト
 cd ../voxel   && npm test   # 26 テスト
 cd ../detector && npm test  # 18 テスト
-cd ../viewer  && npm test   #  2 テスト + tsc --noEmit
+cd ../viewer  && npm test   # 21 テスト（5 テストファイル）
+cd ../spatial-grid && npm test  # 25 テスト
 ```
 
 ### テスト総数
 
 | 対象 | テスト数 |
 |------|:-------:|
-| Python（pytest） | 156 |
+| Python（pytest） | 143 |
 | ws-client（Jest） | 8 |
 | voxel（Jest） | 26 |
 | detector（Jest） | 18 |
-| viewer（Jest + tsc） | 2 |
-| **合計** | **210** |
+| viewer（Jest） | 21 |
+| spatial-grid（Jest） | 25 |
+| **合計** | **241** |
 
 ---
 
@@ -1202,9 +1383,61 @@ cd ../viewer  && npm test   #  2 テスト + tsc --noEmit
 | [`docs/CEPF_USC_Specification_v1_4.md`](CEPF_USC_Specification_v1_4.md) | CEPF v1.40 完全仕様書（フォーマット・API 仕様） |
 | [`docs/cepf-sdk-refactoring-guide.md`](cepf-sdk-refactoring-guide.md) | アーキテクチャ設計方針・実装ガイド |
 | [`docs/implementation-log.md`](implementation-log.md) | 実装履歴・フェーズ別成果物一覧 |
+| [`docs/implementation-roadmap.md`](implementation-roadmap.md) | 実装ロードマップ・機能計画 |
+| [`docs/phase2b-3a-implementation.md`](phase2b-3a-implementation.md) | Phase 2b・3a 実装詳細 |
+| [`docs/websocket-stream-failure-investigation.md`](websocket-stream-failure-investigation.md) | WebSocket ストリーム障害調査記録 |
 | [`apps/sensors.example.json`](../apps/sensors.example.json) | Python センサー設定ファイルのテンプレート |
 | [`apps_ts/sensors.example.json`](../apps_ts/sensors.example.json) | TypeScript センサー設定ファイルのテンプレート |
 
 ---
 
-*最終更新: 2026-03-04 / CEPF v1.40 / SDK v0.2.0*
+*最終更新: 2026-03-18 / CEPF v1.40 / SDK v0.2.0*
+
+---
+
+## 2026-03-18 修正内容
+
+本ドキュメントをリポジトリの実態と照合し、以下の修正を行いました。
+
+### 訂正した誤り
+
+| 箇所 | 修正前 | 修正後 | 理由 |
+|------|--------|--------|------|
+| 全体（§2, §5.1, §7.2） | フィルター **14** 種 | **13** 種 | 5+3+3+2=13。数え間違い |
+| §2 ツリー, §12 | Python テスト **156** | **143** | `pytest --co` 実計測値 |
+| §5.3, §12 | viewer テスト **2 + tsc** | **21**（5ファイル） | layers/ 配下に4テストファイル追加済み |
+| §12 | 合計 **210** テスト | **241** テスト | 143+8+26+18+21+25=241 |
+
+### 追加した漏れ
+
+| 箇所 | 追加内容 |
+|------|---------|
+| §2 ツリー | `cepf_sdk/airy/`（decoder.py）ディレクトリ |
+| §2 ツリー | `apps/pcap_replay.py`, `ouster_pcap_replay.py`, `generate_demo_pcap.py` |
+| §2 ツリー | `ws-client/src/ws-connection-node.ts`（Node.js 専用 WebSocket 実装） |
+| §2 ツリー | `viewer/src/layers/`（8ファイル: frame-dispatcher, point-cloud-layer, voxel-layer, global-voxel-layer, range-wireframe-layer, range-filter-config, types, index） |
+| §2 ツリー | `viewer/src/main.ts`, `stats.ts`, `renderers/global-voxel-renderer.ts`, `overlays/layer-panel.ts` |
+| §2 ツリー | `apps_ts/src/main-detector-nodejs.ts`, `main-detector-debug.ts`, `simple-ws-test.ts`, `sensors.json` |
+| §2 ツリー | `geo-viewer/`（CesiumJS 地図ビューワー, port:3001）パッケージ全体 |
+| §2 ツリー | `spatial-grid/`（WGS84⇔ECEF 座標変換, オイラー⇔四元数）パッケージ全体 |
+| §2 ツリー | `pcap/`（Ouster サンプルデータ）, `start.sh`, `run_tests.py`, `demo.pcap` |
+| §2 ツリー | `vendor/` の `models/`, `util/`, `docs/` サブディレクトリ |
+| §3.4 | `geo-viewer`, `spatial-grid` のインストールコマンド |
+| §5.1 | Mermaid 図に `spatial-grid/` と `geo-viewer/` のフローを追加 |
+| §5.3 | TypeScript コンポーネント表に `geo-viewer/` と `spatial-grid/` を追加 |
+| §5.4 | 実装状況表に `geo-viewer/` と `spatial-grid/` を追加 |
+| §8 | **§8.5 geo-viewer/**（CesiumJS 地図ビューワー）セクション新設 |
+| §8 | **§8.6 spatial-grid/**（座標変換ユーティリティ）セクション新設 |
+| §9, §10.3.2 | Velodyne **HDL-32E** を対応センサーに追加 |
+| §12 | `spatial-grid` テスト（25テスト）を追加 |
+| §13 | `implementation-roadmap.md`, `phase2b-3a-implementation.md`, `websocket-stream-failure-investigation.md` を追加 |
+
+### 修正した曖昧・説明不足
+
+| 箇所 | 内容 |
+|------|------|
+| §2 `ws-client/ws-connection.ts` | 「コールバック・AsyncIterator」→「ブラウザ & Node.js 自動切替」に修正（実態を反映） |
+| §2 `voxel/spatial-id-converter.ts` | 「スタブ」→「BigInt ベース」に修正（実装済み） |
+| §2 `viewer/` | 「Three.js 3D ビューワー」→「Three.js 3D ビューワー（port:3000）」ポート明記 |
+| §13 ドキュメント一覧 | 実在する6ドキュメント全てを網羅 |
+| 最終更新日 | 2026-03-04 → 2026-03-18 |
