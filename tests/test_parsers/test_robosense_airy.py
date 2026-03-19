@@ -41,7 +41,7 @@ def _build_fake_packet() -> bytes:
         struct.pack_into(">H", buf, bs + 2, 18000)
         # Write some channel data (first few channels)
         for ci in range(min(4, CH_PER_DB)):
-            off = bs + 3 + ci * 3
+            off = bs + 4 + ci * 3
             # distance word: 14-bit value = 500 (→ 500 * 0.002 = 1.0m)
             struct.pack_into(">H", buf, off, 500)
             # intensity = 128

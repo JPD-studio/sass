@@ -31,7 +31,7 @@ TICK_OFF = 26        # タイムスタンプのバイトオフセット
 
 FLAG_OFF = 0         # Data Block 先頭フラグ
 AZ_OFF = 2           # 方位角オフセット
-CH_OFF = 3           # チャンネルデータ開始オフセット
+CH_OFF = 4           # チャンネルデータ開始オフセット
 
 
 def _be_u16(b: bytes, off: int) -> int:
@@ -45,7 +45,7 @@ def _be_u32(b: bytes, off: int) -> int:
 
 
 # ---- デフォルト96chの仰角テーブル ----
-_DEFAULT_VERT_DEG_96 = tuple(np.linspace(-15.0, 15.0, 96).tolist())
+_DEFAULT_VERT_DEG_96 = tuple(np.linspace(0.0, 90.0, 96).tolist())
 
 
 @dataclass

@@ -135,7 +135,11 @@ def main() -> None:
     else:
         pipeline = FilterPipeline(
             filters=[
-                CylindricalFilter(radius_m=50.0, z_min_m=-30.0, z_max_m=2.0),
+                CylindricalFilter(
+                    radius_m=5.0,    # 室内スケール
+                    z_min_m=-0.1,    # 床面直下
+                    z_max_m=3.0,     # 天井まで
+                ),
             ],
             verbose=args.verbose,
         )
@@ -148,8 +152,26 @@ def main() -> None:
     # WebSocket 配信を有効にする場合はこの1行を有効に、無効にする場合はコメントアウト
     transport, ws_loop = _start_websocket_server()
 
-    source = AiryLiveSource(usc, sensor_id="lidar", port=6699, agg_seconds=1.0)
-    for frame in source.frames():
+    import queue
+
+    frame_queue: queue.Queue = queue.Queue(maxsize=10)
+
+    def _receiver() -> None:
+        source = AiryLiveSource(usc, sensor_id="lidar", port=6699, agg_seconds=1.0)
+        for frame in source.frames():
+            try:
+                frame_queue.put_nowait(frame)
+            except queue.Full:
+                logger.warning("frame queue full, dropping frame")
+
+    threading.Thread(target=_receiver, daemon=True).start()
+    logger.info("Receiver thread started")
+
+    while True:
+        try:
+            frame = frame_queue.get(timeout=2.0)
+        except queue.Empty:
+            continue
         if args.test_frustum:
             log_frustum_stats(frame)
         if args.test_ror:
@@ -272,8 +294,11 @@ def process_frame(frame, transport=None, ws_loop=None) -> None:
                     frame.point_count, float(np.min(r)),
                     p[0], p[1], p[2], p[3], p[4], float(np.max(r)))
     if transport is not None and ws_loop is not None:
-        asyncio.run_coroutine_threadsafe(transport.send(frame), ws_loop)
-
+        future = asyncio.run_coroutine_threadsafe(transport.send(frame), ws_loop)
+        future.add_done_callback(
+            lambda f: logger.debug("WS send done, err=%s", f.exception()) 
+            if f.exception() else None
+        )
 
 def _apply_pipeline(frame, pipeline: FilterPipeline):
     """FilterPipeline を CepfFrame に適用する"""
