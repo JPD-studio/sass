@@ -98,46 +98,58 @@ def main() -> None:
     usc = UnifiedSenseCloud.from_json(str(config_path))
     logger.info("USC initialized from %s", config_path)
 
-    # フィルターの構築
-    filters = []
-    
-    # FrustumFilter
-    if args.test_frustum:
-        r_bottom = args.frustum_r_bottom or 1.775
-        r_top = args.frustum_r_top or 2.5
-        height = args.frustum_height or 29.0
-        z_bottom = args.frustum_z_bottom or 0.0
-        filters.append(FrustumFilter(r_bottom=r_bottom, r_top=r_top, 
-                                      height=height, z_bottom=z_bottom))
-        logger.info("FrustumFilter added: r_bottom=%.3f, r_top=%.3f, height=%.3f, z_bottom=%.3f",
-                   r_bottom, r_top, height, z_bottom)
-    
-    # RadiusOutlierRemoval
-    if args.test_ror:
-        radius = args.ror_radius or 0.3
-        min_neighbors = args.ror_min_neighbors or 5
-        distance_scale = args.ror_distance_scale or 0.0
-        filters.append(RadiusOutlierRemoval(radius_m=radius, min_neighbors=min_neighbors,
-                                            distance_scale=distance_scale))
-        logger.info("RadiusOutlierRemoval added: radius=%.3f, min_neighbors=%d, distance_scale=%.3f",
-                   radius, min_neighbors, distance_scale)
-    
-    # CoordinateTransform
-    if args.transform:
-        azimuth = args.transform_azimuth or 0.0
-        elevation = args.transform_elevation or 0.0
-        tx = args.transform_tx or 0.0
-        ty = args.transform_ty or 0.0
-        tz = args.transform_tz or 0.0
-        filters.append(CoordinateTransform(azimuth_deg=azimuth, elevation_deg=elevation,
-                                           tx_m=tx, ty_m=ty, tz_m=tz))
-        logger.info("CoordinateTransform added: azimuth=%.2f, elevation=%.2f, tx=%.3f, ty=%.3f, tz=%.3f",
-                   azimuth, elevation, tx, ty, tz)
-    
-    # デフォルトの CylindricalFilter
-    filters.append(CylindricalFilter(radius_m=50.0, z_min_m=-2.0, z_max_m=30.0))
-
-    pipeline = FilterPipeline(filters=filters, verbose=args.verbose)
+    # フィルターの追加
+    if args.transform or args.test_frustum or args.test_ror:
+        filters = []
+        if args.transform:
+            tkw = {}
+            if args.transform_azimuth   is not None: tkw["azimuth_deg"]   = args.transform_azimuth
+            if args.transform_elevation is not None: tkw["elevation_deg"] = args.transform_elevation
+            if args.transform_tx        is not None: tkw["tx"]            = args.transform_tx
+            if args.transform_ty        is not None: tkw["ty"]            = args.transform_ty
+            if args.transform_tz        is not None: tkw["tz"]            = args.transform_tz
+            xform = CoordinateTransform(**tkw)
+            filters.append(xform)
+            logger.info(
+                "CoordinateTransform: azimuth=%.1fdeg, elevation=%.1fdeg, "
+                "t=(%.2f, %.2f, %.2f)m",
+                xform.azimuth_deg, xform.elevation_deg, xform.tx, xform.ty, xform.tz,
+            )
+        if args.test_frustum:
+            fkw = {}
+            if args.frustum_r_bottom is not None: fkw["r_bottom"] = args.frustum_r_bottom
+            if args.frustum_r_top    is not None: fkw["r_top"]    = args.frustum_r_top
+            if args.frustum_height   is not None: fkw["height"]   = args.frustum_height
+            if args.frustum_z_bottom is not None: fkw["z_bottom"] = args.frustum_z_bottom
+            frustum = FrustumFilter(**fkw)
+            filters.append(frustum)
+            logger.info(
+                "FrustumFilter: r_bottom=%.3fm, r_top=%.3fm, height=%.1fm, z_bottom=%.1fm",
+                frustum.r_bottom, frustum.r_top, frustum.height, frustum.z_bottom,
+            )
+        if args.test_ror:
+            rkw = {}
+            if args.ror_radius         is not None: rkw["radius_m"]       = args.ror_radius
+            if args.ror_min_neighbors  is not None: rkw["min_neighbors"]  = args.ror_min_neighbors
+            if args.ror_distance_scale is not None: rkw["distance_scale"] = args.ror_distance_scale
+            ror = RadiusOutlierRemoval(**rkw)
+            filters.append(ror)
+            logger.info(
+                "RadiusOutlierRemoval: radius=%.3fm, min_neighbors=%d, distance_scale=%.3f",
+                ror.radius_m, ror.min_neighbors, ror.distance_scale,
+            )
+        pipeline = FilterPipeline(filters=filters, verbose=True)
+    else:
+        pipeline = FilterPipeline(
+            filters=[
+                CylindricalFilter(
+                    radius_m=5.0,    # 室内スケール
+                    z_min_m=-0.1,    # 床面直下
+                    z_max_m=3.0,     # 天井まで
+                ),
+            ],
+            verbose=args.verbose,
+        )
     usc.add_filter(lambda frame: _apply_pipeline(frame, pipeline))
 
     logger.info("Pipeline ready. Waiting for sensor data...")
@@ -145,24 +157,34 @@ def main() -> None:
     # WebSocket サーバー起動（オプション）
     transport = None
     ws_loop = None
-    if args.use_airy_live:
-        transport, ws_loop = _start_websocket_server()
+    # WebSocket 配信を有効にする場合はこの1行を有効に、無効にする場合はコメントアウト
+    transport, ws_loop = _start_websocket_server()
+
+    import queue
+
+    frame_queue: queue.Queue = queue.Queue(maxsize=10)
+
+    def _receiver() -> None:
         source = AiryLiveSource(usc, sensor_id="lidar", port=args.airy_port, agg_seconds=1.0)
         for frame in source.frames():
-            if args.test_frustum:
-                log_frustum_stats(frame)
-            if args.test_ror:
-                log_ror_stats(frame)
-            process_frame(frame, transport, ws_loop)
-    else:
-        # デフォルトモード: コメント付きのプレースホルダー
-        logger.info("Running in default mode. No data source configured.")
-        logger.info("To use AiryLiveSource, run with --use-airy-live flag.")
-        # ここからセンサーデータの受信・処理ループを実装
-        # 例:
-        #   for raw_data in receive_udp_packets():
-        #       frame = usc.forge("lidar_north", raw_data)
-        #       process_frame(frame)
+            try:
+                frame_queue.put_nowait(frame)
+            except queue.Full:
+                logger.warning("frame queue full, dropping frame")
+
+    threading.Thread(target=_receiver, daemon=True).start()
+    logger.info("Receiver thread started")
+
+    while True:
+        try:
+            frame = frame_queue.get(timeout=2.0)
+        except queue.Empty:
+            continue
+        if args.test_frustum:
+            log_frustum_stats(frame)
+        if args.test_ror:
+            log_ror_stats(frame)
+        process_frame(frame, transport, ws_loop)
 
 
 def _start_websocket_server(host: str = "0.0.0.0", port: int = 8765):
@@ -285,10 +307,14 @@ def process_frame(frame, transport=None, ws_loop=None) -> None:
             p[0], p[1], p[2], p[3], p[4], float(np.max(r))
         )
     if transport is not None and ws_loop is not None:
-        asyncio.run_coroutine_threadsafe(transport.send(frame), ws_loop)
+        future = asyncio.run_coroutine_threadsafe(transport.send(frame), ws_loop)
+        future.add_done_callback(
+            lambda f: logger.debug("WS send done, err=%s", f.exception()) 
+            if f.exception() else None
+        )
 
 
-
+def _apply_pipeline(frame, pipeline):
     """FilterPipeline を CepfFrame に適用する"""
     from dataclasses import replace
     result = pipeline.apply(frame.points)
