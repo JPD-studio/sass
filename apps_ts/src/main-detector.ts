@@ -4,6 +4,7 @@
  * WsConnection でフレームを受信し、背景学習 → 差分計算 → 侵入検知を行う。
  */
 import { WsConnection } from "../../ws-client/src/ws-connection-node.js";
+import { resolveWsUrl } from "../../ws-client/src/resolve-ws-url-node.js";
 import { VoxelGrid } from "../../voxel/src/voxel-grid.js";
 import { BackgroundVoxelMap } from "../../voxel/src/background-voxel-map.js";
 import { computeDiff } from "../../voxel/src/voxel-diff.js";
@@ -20,13 +21,13 @@ const sensorsJsonPath = join(__dirname, "../sensors.json");
 const sensorsFallbackPath = join(__dirname, "../sensors.example.json");
 const _require = createRequire(import.meta.url);
 const config: {
-  websocket_url: string;
   voxel_cell_size: number;
   detector: { strategy: string; sigma: number; min_background_samples: number };
 } = existsSync(sensorsJsonPath) ? _require(sensorsJsonPath) : _require(sensorsFallbackPath);
 
+const wsUrl = resolveWsUrl(join(__dirname, "../../runtime/websocket.json"));
 const conn = new WsConnection({
-  url: config.websocket_url,
+  url: wsUrl,
   reconnectInterval: 3000,
 });
 

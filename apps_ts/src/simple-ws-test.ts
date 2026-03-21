@@ -3,8 +3,12 @@
  * 直接wsパッケージを使ってWebSocket接続をテスト
  */
 import WebSocket from "ws";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
+import { resolveWsUrl } from "../../ws-client/src/resolve-ws-url-node.js";
 
-const url = "ws://127.0.0.1:8765";
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const url = resolveWsUrl(join(__dirname, "../../runtime/websocket.json"));
 
 const ws = new WebSocket(url);
 

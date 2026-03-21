@@ -129,8 +129,8 @@ export class GlobalVoxelLayer implements RenderLayer {
     const cells = new Map<VoxelKey, VoxelState>();
 
     for (const p of points) {
-      // センサーローカル → WGS84 (Z は下向きなので反転)
-      const wgs84 = this._sensorTransformer.transformPoint(p.x, p.y, -p.z);
+      // センサーローカル → WGS84 (Ouster は Z-up 座標系 — 反転不要)
+      const wgs84 = this._sensorTransformer.transformPoint(p.x, p.y, p.z);
 
       // WGS84グリッド単位でスナップ（GridLine()の度数差を使用）
       const ilat = Math.floor(wgs84.lat / this._latUnit);

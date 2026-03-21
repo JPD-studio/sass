@@ -15,6 +15,7 @@ import "cesium/Build/Cesium/Widgets/widgets.css";
 
 import { CoordinateTransformer } from "../../spatial-grid/src/coordinate-transform.js";
 import { WsConnection } from "../../ws-client/src/ws-connection.js";
+import { resolveWsUrl } from "../../ws-client/src/resolve-ws-url.js";
 import { PointCloudLayer } from "./point-cloud-layer.js";
 import type { GeoViewerConfig } from "./types.js";
 
@@ -76,12 +77,13 @@ let lastTime = performance.now();
 let frameCount = 0;
 
 // ── WebSocket 接続 ──
+const WS_URL = await resolveWsUrl();
 const conn = new WsConnection({
-  url: config.websocket_url,
+  url: WS_URL,
   reconnectInterval: 3000,
 });
 
-console.log(`[Geo-Viewer] WebSocket 接続: ${config.websocket_url}`);
+console.log(`[Geo-Viewer] WebSocket 接続: ${WS_URL}`);
 conn.connect();
 
 for await (const localPoints of conn.frames()) {

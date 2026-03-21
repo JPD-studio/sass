@@ -4,6 +4,7 @@
  * FrameDispatcher で受信フレームを 3 つの RenderLayer に分配する。
  */
 import { WsConnection } from "../../ws-client/src/ws-connection.js";
+import { resolveWsUrl } from "../../ws-client/src/resolve-ws-url.js";
 import { ViewerApp } from "../../viewer/src/index.js";
 import { FrameDispatcher } from "../../viewer/src/layers/frame-dispatcher.js";
 import { PointCloudLayer } from "../../viewer/src/layers/point-cloud-layer.js";
@@ -27,14 +28,17 @@ dispatcher.register(new RangeWireframeLayer(viewer.scene));
 new LayerPanel(container, dispatcher);
 
 // --- WebSocket 受信 ---
-const conn = new WsConnection({
-  url: config.websocket_url,
-  reconnectInterval: 3000,
-});
+(async () => {
+  const wsUrl = await resolveWsUrl();
+  const conn = new WsConnection({
+    url: wsUrl,
+    reconnectInterval: 3000,
+  });
 
-conn.onMessage((points) => {
-  dispatcher.dispatch(points);
-});
+  conn.onMessage((points) => {
+    dispatcher.dispatch(points);
+  });
 
-conn.connect();
-viewer.render();
+  conn.connect();
+  viewer.render();
+})();

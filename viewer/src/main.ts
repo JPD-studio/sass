@@ -7,12 +7,14 @@
  *   voxel_mode: "global" → GlobalVoxelLayer (ALoGS 空間ID + WGS84 逆変換)
  *   voxel_mode: "both"   → 左右分割表示 (左: local / 右: global)
  *
- * WebSocket URL は config.json > meta タグ > URL クエリ > localhost:8765 の優先順
+ * WebSocket URL は ws-client の resolveWsUrl() で一元解決:
+ *   URL クエリ ?ws= → <meta name="ws-url"> → /websocket.json → hostname:8765
  *
  * ※ top-level await は Jetson Chromium との互換性問題があるため
  *    async IIFE パターンを使用 (webpack experiments.topLevelAwait 不要)
  */
 import { WsConnection } from "../../ws-client/src/ws-connection.js";
+import { resolveWsUrl } from "../../ws-client/src/resolve-ws-url.js";
 import { ViewerApp } from "./index.js";
 import { FrameDispatcher } from "./layers/frame-dispatcher.js";
 import { PointCloudLayer } from "./layers/point-cloud-layer.js";
@@ -24,7 +26,6 @@ import type { SensorMount } from "../../spatial-grid/src/types.js";
 
 // ── 設定型 ──
 interface ViewerConfig {
-  websocket_url?: string;
   voxel_mode?: "local" | "global" | "both";
   voxel_cell_size?: number;
   global_voxel_unit_m?: number;
@@ -62,20 +63,6 @@ function buildMount(cfg: ViewerConfig): SensorMount | null {
   };
 }
 
-// ── WebSocket URL 解決 ──
-function resolveWsUrl(config: ViewerConfig): string {
-  const params = new URLSearchParams(window.location.search);
-  const fromQuery = params.get("ws");
-  if (fromQuery) return fromQuery;
-
-  const meta = document.querySelector<HTMLMetaElement>('meta[name="ws-url"]');
-  if (meta?.content) return meta.content;
-
-  if (config.websocket_url) return config.websocket_url;
-
-  return `ws://${window.location.hostname}:8765`;
-}
-
 // ================================================================
 //  メイン初期化 — async IIFE
 //  top-level await を使わないことで webpack の実験的機能に依存しない
@@ -90,7 +77,7 @@ function resolveWsUrl(config: ViewerConfig): string {
     // config.json がない場合はデフォルト動作 (ローカルモード)
   }
 
-  const WS_URL    = resolveWsUrl(config);
+  const WS_URL    = await resolveWsUrl();
   const voxelMode = config.voxel_mode ?? "local";
   const cellSize  = config.voxel_cell_size ?? 1.0;
   const unitM     = config.global_voxel_unit_m ?? 10.0;

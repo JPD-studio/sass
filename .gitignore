@@ -53,3 +53,7 @@ htmlcov/
 pcap/
 *.pcap
 demo.pcap
+.logs/
+runtime/
+viewer/websocket.json
+geo-viewer/websocket.json

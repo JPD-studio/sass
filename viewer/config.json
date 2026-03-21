@@ -1,5 +1,4 @@
 {
-  "websocket_url": "ws://127.0.0.1:8765",
   "voxel_mode": "both",
   "voxel_cell_size": 1.0,
   "global_voxel_unit_m": 0.5,

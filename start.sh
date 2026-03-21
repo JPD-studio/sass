@@ -14,10 +14,19 @@
 #    ./start.sh --stop          # 起動中のプロセスを停止
 #
 #  データフロー:
-#    PCAP ──▶ Python パーサー ──▶ WebSocket (ws://0.0.0.0:8765)
-#                                     ├──▶ Viewer     (http://localhost:3000) [Three.js]
-#                                     ├──▶ Geo-Viewer (http://localhost:3001) [CesiumJS]
-#                                     └──▶ Detector   (ヘッドレス侵入検知)
+#    Source (PCAP | LiDAR UDP)
+#      ↓  CepfFrame
+#    FilterPipeline (Frustum, RoR, CoordinateTransform, ...)
+#      ↓  CepfFrame (filtered)
+#    WebSocket (ws://0.0.0.0:8765)
+#      ├──▶ Viewer     (http://localhost:3000) [Three.js]
+#      ├──▶ Geo-Viewer (http://localhost:3001) [CesiumJS]
+#      └──▶ Detector   (ヘッドレス侵入検知)
+#
+#  フィルター制御:
+#    SASS_PIPELINE_FILTERS="--test-frustum"         # デフォルト: Frustum 有効
+#    SASS_PIPELINE_FILTERS="--test-frustum --test-ror"  # Frustum + RoR
+#    SASS_PIPELINE_FILTERS=""                        # フィルターなし
 #
 # =============================================================================
 set -euo pipefail
@@ -32,8 +41,8 @@ PID_DIR="$SCRIPT_DIR/.pids"
 LOG_DIR="$SCRIPT_DIR/.logs"
 
 # PCAP リプレイ設定
-PCAP_FILE="${SASS_PCAP:-pcap/250808sbir_20250808133236_00001.pcap}"
-PCAP_META="${SASS_PCAP_META:-pcap/os1-128-rng19.json}"
+PCAP_FILE="${SASS_PCAP:-pcap/demo1.pcap}"
+PCAP_META="${SASS_PCAP_META:-pcap/demo1.json}"
 PCAP_RATE="${SASS_PCAP_RATE:-1.0}"
 
 # ポート
@@ -303,30 +312,57 @@ if $INSTALL_ONLY; then
 fi
 
 # ──────────────────────────────────────────────────────────────────────────────
-#  ステップ 5: PCAP リプレイ (WebSocket サーバー) 起動
+#  ステップ 4c: WebSocket 共通設定 (runtime/websocket.json)
 # ──────────────────────────────────────────────────────────────────────────────
-log_step "ステップ 5: PCAP リプレイ起動 (WebSocket :$WS_PORT)"
+log_step "ステップ 4c: WebSocket 共通設定"
+
+mkdir -p runtime
+cat > runtime/websocket.json <<EOF
+{
+  "websocket_url": "ws://127.0.0.1:$WS_PORT"
+}
+EOF
+log_ok "runtime/websocket.json を生成しました (ws://127.0.0.1:$WS_PORT)"
+
+# ブラウザアプリ用に配信ディレクトリへコピー
+cp runtime/websocket.json viewer/websocket.json 2>/dev/null && \
+    log_ok "viewer/websocket.json へコピー" || true
+cp runtime/websocket.json geo-viewer/websocket.json 2>/dev/null && \
+    log_ok "geo-viewer/websocket.json へコピー" || true
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  ステップ 5: パイプライン起動 (ソース → フィルター → WebSocket)
+# ──────────────────────────────────────────────────────────────────────────────
+log_step "ステップ 5: パイプライン起動 (WebSocket :$WS_PORT)"
 
 mkdir -p "$LOG_DIR"
 
+# パイプラインフィルター設定 (環境変数で追加可能)
+PIPELINE_FILTERS="${SASS_PIPELINE_FILTERS:---test-frustum}"
+
 if [[ -f "$PCAP_FILE" && -f "$PCAP_META" ]]; then
-    log_info "Ouster PCAP リプレイ: $PCAP_FILE"
+    log_info "ソース: PCAP リプレイ ($PCAP_FILE)"
+    log_info "フィルター: $PIPELINE_FILTERS"
     (
-        PYTHONPATH="$SCRIPT_DIR" python3 apps/ouster_pcap_replay.py \
+        PYTHONPATH="$SCRIPT_DIR" python3 apps/run_pipeline.py \
+            --use-pcap \
             --pcap "$PCAP_FILE" \
             --meta "$PCAP_META" \
             --rate "$PCAP_RATE" \
-            --loop --verbose
+            --loop \
+            --ws-port "$WS_PORT" \
+            $PIPELINE_FILTERS \
+            --verbose
         EXIT_CODE=$?
-        echo "$(date '+%Y-%m-%d %H:%M:%S') [WATCHDOG] pcap_replay exited with code $EXIT_CODE" >> "$LOG_DIR/pcap_replay.log"
+        echo "$(date '+%Y-%m-%d %H:%M:%S') [WATCHDOG] pipeline exited with code $EXIT_CODE" >> "$LOG_DIR/pcap_replay.log"
         echo "$(date '+%Y-%m-%d %H:%M:%S') [WATCHDOG] dmesg (last 10 lines):" >> "$LOG_DIR/pcap_replay.log"
         dmesg | tail -10 >> "$LOG_DIR/pcap_replay.log" 2>/dev/null || true
     ) > "$LOG_DIR/pcap_replay.log" 2>&1 &
     REPLAY_PID=$!
     save_pid "pcap_replay" "$REPLAY_PID"
-    log_ok "Ouster PCAP リプレイ起動 (PID $REPLAY_PID, verbose mode)"
+    log_ok "パイプライン起動 (PID $REPLAY_PID, PCAP + フィルター)"
 elif [[ -f "demo.pcap" ]]; then
-    log_info "汎用 PCAP リプレイ: demo.pcap"
+    log_info "ソース: 汎用 PCAP リプレイ (demo.pcap, フィルターなし)"
     PYTHONPATH="$SCRIPT_DIR" python3 apps/pcap_replay.py \
         --pcap demo.pcap \
         --parser ouster \
@@ -334,7 +370,7 @@ elif [[ -f "demo.pcap" ]]; then
         > "$LOG_DIR/pcap_replay.log" 2>&1 &
     REPLAY_PID=$!
     save_pid "pcap_replay" "$REPLAY_PID"
-    log_ok "汎用 PCAP リプレイ起動 (PID $REPLAY_PID)"
+    log_ok "汎用 PCAP リプレイ起動 (PID $REPLAY_PID, フォールバック)"
 else
     log_err "PCAP ファイルが見つかりません: $PCAP_FILE"
     log_warn "SASS_PCAP 環境変数で PCAP ファイルを指定してください"
@@ -368,7 +404,6 @@ import json, pathlib
 src = pathlib.Path('apps_ts/sensors.example.json').read_text()
 obj = json.loads(src)
 config = {
-    'websocket_url': 'ws://127.0.0.1:$WS_PORT',
     'voxel_mode': '$VIEWER_VOXEL_MODE',
     'voxel_cell_size': 1.0,
     'global_voxel_unit_m': 10.0,
@@ -413,7 +448,6 @@ import json, pathlib
 src = pathlib.Path('apps_ts/sensors.example.json').read_text()
 obj = json.loads(src)
 config = {
-    'websocket_url': 'ws://127.0.0.1:$WS_PORT',
     'coin': {},
     'mount': obj.get('mount', {
         'position': {'lat': 0, 'lng': 0, 'alt': 0},
@@ -452,10 +486,9 @@ if $RUN_DETECTOR; then
 import json, pathlib
 src = pathlib.Path('apps_ts/sensors.example.json').read_text()
 obj = json.loads(src)
-obj['websocket_url'] = 'ws://127.0.0.1:$WS_PORT'
 print(json.dumps(obj, indent=2, ensure_ascii=False))
 " > apps_ts/sensors.json
-        log_ok "apps_ts/sensors.json を生成しました (ws://127.0.0.1:$WS_PORT)"
+        log_ok "apps_ts/sensors.json を生成しました"
     else
         log_ok "apps_ts/sensors.json が既に存在します"
     fi

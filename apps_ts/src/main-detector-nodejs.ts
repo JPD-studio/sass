@@ -9,6 +9,7 @@ const WebSocket = WebSocketModule.WebSocket || WebSocketModule.default;
 import * as fs from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
+import { resolveWsUrl } from "../../ws-client/src/resolve-ws-url-node.js";
 import { VoxelGrid } from "../../voxel/src/voxel-grid.js";
 import { BackgroundVoxelMap } from "../../voxel/src/background-voxel-map.js";
 import { computeDiff } from "../../voxel/src/voxel-diff.js";
@@ -27,7 +28,7 @@ try {
     "utf-8"
   );
   config = JSON.parse(content);
-  console.log("[DETECTOR] Config loaded:", config.websocket_url);
+  console.log("[DETECTOR] Config loaded:", config.voxel_cell_size);
 } catch (err) {
   console.error("[DETECTOR] Failed to load config:", err);
   process.exit(1);
@@ -43,10 +44,11 @@ let frameId = 0;
 let connectedTime = Date.now();
 
 // WebSocket接続
-const ws = new WebSocket(config.websocket_url);
+const wsUrl = resolveWsUrl(path.join(__dirname, "../../runtime/websocket.json"));
+const ws = new WebSocket(wsUrl);
 
 ws.on("open", () => {
-  console.log("[DETECTOR] Connected to", config.websocket_url);
+  console.log("[DETECTOR] Connected to", wsUrl);
   connectedTime = Date.now();
 });
 
@@ -120,4 +122,4 @@ process.on("SIGINT", () => {
   process.exit(0);
 });
 
-console.log("[DETECTOR] Initializing... connecting to", config.websocket_url);
+console.log("[DETECTOR] Initializing... connecting to", wsUrl);

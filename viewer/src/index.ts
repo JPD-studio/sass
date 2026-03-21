@@ -124,7 +124,7 @@ export class ViewerApp {
       const p = points[i];
       this._positions[i * 3] = p.x;
       this._positions[i * 3 + 1] = p.y;
-      this._positions[i * 3 + 2] = -p.z; // センサーフレームの Z は下向き → 反転
+      this._positions[i * 3 + 2] = p.z; // Ouster は Z-up 座標系 — 反転不要
 
       // 距離に応じた色: 近い=青、遠い=赤（HSL）
       const dist = Math.sqrt(p.x * p.x + p.y * p.y + p.z * p.z);
