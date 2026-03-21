@@ -91,9 +91,8 @@ http://192.168.10.101:3000/?rawPort=8766  ← リモートアクセスも動作
 |:-:|---------|:--------:|---------|
 | 1 | `apps/run_pipeline.py` | 修正 | `--raw-ws-port` CLI 引数追加、メインループに raw 送信追加 |
 | 2 | `viewer/src/main.ts` | 修正 | `?rawPort=` 判定、Raw モード時のレイヤー初期化分岐 |
-| 3 | `ws-client/src/resolve-ws-url.ts` | 修正 | `resolveWsUrl()` にオプション引数 `portOverride` 追加 |
-| 4 | `start.sh` | 修正 | `--raw-viewer` オプション追加、パイプライン起動コマンド拡張 |
-| 5 | `docs/readme.md` | 修正 | §3.6 に Raw Viewer 操作マニュアル追加、§14.10 に環境変数追加 |
+| 3 | `start.sh` | 修正 | `--raw-viewer` オプション追加、パイプライン起動コマンド拡張 |
+| 4 | `docs/readme.md` | 修正 | §3.6 に Raw Viewer 操作マニュアル追加 |
 
 **作成不要なファイル:** なし（既存ファイルの修正のみ）
 
@@ -170,7 +169,8 @@ for frame in source.frames():
 
 Raw WebSocket には `filter_config` メッセージを**送信しない**：
 - Raw Viewer にワイヤーフレームは不要（FR-2）
-- `broadcast_raw()` を呼ばないだけで自然に実現
+- `broadcast_raw()` を `raw_transport` に対して呼ばないだけで自然に実現
+- `WebSocketTransport._last_raw` キャッシュも `None` のまま → 新規接続時にも `filter_config` は送信されない
 
 ---
 
@@ -209,10 +209,12 @@ if (rawMode) {
 
 #### ステップ 2.3: レイヤー初期化の分岐
 
-**シングルモード部分** を以下のように修正：
+既存の `if (voxelMode === "both") { ... } else { ... }` 分岐の**前**に `rawMode` 判定を最優先で挿入する。
+`?rawPort=` と `voxel_mode: "both"` の組み合わせは想定外のため、Raw モード時は常にシングル・点群のみモードに強制する。
 
 ```typescript
-} else {
+if (rawMode) {
+  // ── Raw Viewer 専用パス（常にシングル・点群のみ） ──
   const container = document.getElementById("viewer-container") as HTMLElement;
   if (!container) throw new Error("#viewer-container が見つかりません");
 
@@ -220,49 +222,19 @@ if (rawMode) {
   const dispatcher = new FrameDispatcher();
 
   dispatcher.register(new PointCloudLayer(viewer));
-
-  if (!rawMode) {
-    // ── 通常モード: ボクセル＋ワイヤーフレーム ──
-    if (voxelMode === "global") {
-      // ... 既存のグローバルボクセル初期化 ...
-    } else {
-      dispatcher.register(new VoxelLayer(viewer, cellSize));
-    }
-
-    const wireframeSingle = new RangeWireframeLayer(viewer.scene);
-    dispatcher.register(wireframeSingle);
-    new LayerPanel(container, dispatcher);
-
-    conn.onRawMessage((msg) => {
-      if (msg.type === "filter_config") {
-        // ... 既存のワイヤーフレーム更新 ...
-      }
-    });
-  }
-  // ── Raw モード: PointCloudLayer のみ（ボクセル・ワイヤーフレームなし） ──
+  // ボクセル・ワイヤーフレーム・LayerPanel は登録しない
 
   conn.onMessage((points) => {
     dispatcher.dispatch(points);
-    setStatus(rawMode ? "RAW ✓" : "接続済み ✓", dispatcher.frameId, points.length);
+    setStatus("RAW ✓", dispatcher.frameId, points.length);
   });
 
   viewer.render();
-}
-```
-
-**スプリット（both）モードの扱い:**
-- `?rawPort=` と `voxel_mode: "both"` の組み合わせは想定外
-- Raw モード時はスプリット分岐の**前**で早期にシングルモードに入るよう `rawMode` 判定を最優先にする
-
-```typescript
-if (rawMode) {
-  // Raw Viewer 専用パス（常にシングル・点群のみ）
-  // ...
 } else if (voxelMode === "both") {
-  // 既存スプリットモード
+  // 既存スプリットモード（変更なし）
   // ...
 } else {
-  // 既存シングルモード
+  // 既存シングルモード（変更なし）
   // ...
 }
 ```
@@ -296,6 +268,8 @@ RAW_VIEWER_PORT=""
 --raw-viewer)  RAW_VIEWER_PORT=8766; shift ;;
 ```
 
+**ポート 8766 固定の意図:** 現時点では設定可能にする必要がないため、ハードコード。将来 `SASS_RAW_WS_PORT` 環境変数で上書き可能にすることを検討（セクション 10 参照）。
+
 #### ステップ 3.2: パイプライン起動コマンドへの引数追加
 
 ステップ 5 のパイプライン起動部分で、`$PIPELINE_FILTERS` の後に追加：
@@ -316,7 +290,9 @@ PYTHONPATH="$SCRIPT_DIR" python3 apps/run_pipeline.py \
     --verbose
 ```
 
-**注意:** Airy モードの起動コマンドにも同じ `$RAW_VIEWER_ARG` を追加すること（漏れやすいポイント）。
+**注意:**
+- Airy モードの起動コマンドにも同じ `$RAW_VIEWER_ARG` を追加すること（漏れやすいポイント）。
+- fallback パス（`pcap_replay.py` を使う簡易モード）は FilterPipeline を通さないため `$RAW_VIEWER_ARG` の追加は**不要**。
 
 #### ステップ 3.3: 起動メッセージ
 
@@ -361,12 +337,7 @@ cd viewer && npm run bundle
 
 - 使い方（URL の開き方、ブラウザの並べ方）
 - 注意事項（帯域幅の増加、Jetson のメモリ消費）
-
-#### §14.10 環境変数表に追加
-
-```markdown
-| `SASS_RAW_WS_PORT` | Raw Viewer 用 WebSocket ポート | `8766`（`--raw-viewer` 指定時） |
-```
+- ポートは現在 8766 固定（環境変数によるカスタマイズは将来対応、セクション 10 参照）
 
 ---
 
@@ -389,9 +360,9 @@ cd viewer && npm run bundle
 | リソース | 増加量 | 根拠 |
 |---------|--------|------|
 | **メモリ** | +1 スレッド + 1 asyncio event loop + 1 WebSocketTransport | ~2 MB |
-| **CPU** | フレームの JSON シリアライズが 2 倍 | `_frame_to_json()` はフレームあたり ~1 ms |
+| **CPU** | フレームの JSON シリアライズが 2 倍 | `WebSocketTransport._frame_to_json()` が各 WS スレッドで並列実行（~1 ms/フレーム × 2） |
 | **帯域幅** | 128ch × ~46,000 点 × ~160 bytes/点 ≈ **7.4 MB/フレーム** を追加配信 | 10 fps 時 ~74 MB/s 追加 |
-| **レイテンシ** | raw 送信 → filter 適用 → filtered 送信（逐次） | 1 フレームあたり ~2 ms 増加 |
+| **メインループ遅延** | `asyncio.run_coroutine_threadsafe()` 1 回追加（非ブロッキング） | ~数 µs（JSON シリアライズは WS スレッド側で実行されるため、メインループは阻害されない） |
 
 ### 帯域幅の軽減策（将来）
 

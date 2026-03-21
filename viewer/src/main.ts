@@ -77,7 +77,20 @@ function buildMount(cfg: ViewerConfig): SensorMount | null {
     // config.json がない場合はデフォルト動作 (ローカルモード)
   }
 
-  const WS_URL    = await resolveWsUrl();
+  // ── Raw Viewer モード判定 ──
+  const params  = new URLSearchParams(window.location.search);
+  const rawPort = params.get("rawPort");
+  const rawMode = rawPort !== null;
+
+  let WS_URL: string;
+  if (rawMode) {
+    WS_URL = `ws://${window.location.hostname}:${rawPort}`;
+    console.log("[RAW VIEWER] Raw mode enabled, WS:", WS_URL);
+    document.title = "CEPF Raw Viewer（フィルター前）";
+  } else {
+    WS_URL = await resolveWsUrl();
+  }
+
   const voxelMode = config.voxel_mode ?? "local";
   const cellSize  = config.voxel_cell_size ?? 1.0;
   const unitM     = config.global_voxel_unit_m ?? 10.0;
@@ -86,16 +99,36 @@ function buildMount(cfg: ViewerConfig): SensorMount | null {
   // ── デバッグ出力 ──
   console.log("[VIEWER] WebSocket URL:", WS_URL);
   console.log("[VIEWER] window.location.hostname:", window.location.hostname);
-  console.log("[VIEWER] voxel_mode:", voxelMode);
+  console.log("[VIEWER] voxel_mode:", voxelMode, "rawMode:", rawMode);
 
   // ── WebSocket 接続 (共通) ──
   const conn = new WsConnection({ url: WS_URL, reconnectInterval: 3000 });
 
   // ================================================================
+  //  Raw Viewer モード (?rawPort= 指定時)
+  //  フィルター前の生点群を点群のみで表示（ボクセル・ワイヤーフレームなし）
+  // ================================================================
+  if (rawMode) {
+    const container = document.getElementById("viewer-container") as HTMLElement;
+    if (!container) throw new Error("#viewer-container が見つかりません");
+
+    const viewer     = new ViewerApp(container, config.coin);
+    const dispatcher = new FrameDispatcher();
+
+    dispatcher.register(new PointCloudLayer(viewer));
+
+    conn.onMessage((points) => {
+      dispatcher.dispatch(points);
+      setStatus("RAW ✓", dispatcher.frameId, points.length);
+    });
+
+    viewer.render();
+
+  // ================================================================
   //  スプリットモード (voxel_mode: "both")
   //  左ペイン: ローカルボクセル / 右ペイン: グローバルボクセル
   // ================================================================
-  if (voxelMode === "both") {
+  } else if (voxelMode === "both") {
     document.body.classList.add("split-mode");
 
     const containerLeft  = document.getElementById("viewer-left")  as HTMLElement;

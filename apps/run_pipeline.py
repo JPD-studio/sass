@@ -145,6 +145,8 @@ def _build_parser() -> argparse.ArgumentParser:
     ws = p.add_argument_group("WebSocket 設定")
     ws.add_argument("--ws-host", default="0.0.0.0", help="WebSocket ホスト")
     ws.add_argument("--ws-port", type=int, default=8765, help="WebSocket ポート")
+    ws.add_argument("--raw-ws-port", type=int, default=None,
+                    help="フィルター前点群用 WebSocket ポート（未指定時は Raw Viewer 無効）")
 
     # ── Frustum フィルター（フォールバック: frustum.py モジュール定数）──
     fr = p.add_argument_group("FrustumFilter")
@@ -641,6 +643,18 @@ def main() -> None:
     # 3. WebSocket サーバー起動
     transport, ws_loop = _start_websocket_server(host=args.ws_host, port=args.ws_port)
 
+    # 3a. Raw Viewer 用 WebSocket サーバー起動（条件付き）
+    raw_transport = None
+    raw_ws_loop = None
+    if args.raw_ws_port is not None:
+        if args.raw_ws_port == args.ws_port:
+            logger.error("--raw-ws-port と --ws-port が同じ値です: %d", args.raw_ws_port)
+            sys.exit(1)
+        raw_transport, raw_ws_loop = _start_websocket_server(
+            host=args.ws_host, port=args.raw_ws_port
+        )
+        logger.info("Raw Viewer WebSocket: ws://%s:%d", args.ws_host, args.raw_ws_port)
+
     # 3b. effective config を WS ブロードキャスト（ワイヤーフレーム同期用）
     _ftrs = _load_sass_config().get("filters", {})
     _ftrs_frustum = _ftrs.get("frustum", {})
@@ -698,6 +712,10 @@ def main() -> None:
     # 4. メインループ — ソースからフレームを取得 → フィルター → WebSocket 配信
     logger.info("パイプライン開始: ソース → フィルター → WebSocket 配信")
     for frame in source.frames():
+        # Raw Viewer 配信（フィルター前）
+        if raw_transport is not None:
+            _process_frame(frame, raw_transport, raw_ws_loop)
+
         # フィルター適用
         filtered = _apply_pipeline(frame, pipeline)
 
@@ -711,7 +729,7 @@ def main() -> None:
         if filtered.metadata.frame_id % 20 == 0:
             _log_frame_stats(filtered)
 
-        # WebSocket 配信
+        # WebSocket 配信（フィルター後）
         _process_frame(filtered, transport, ws_loop)
 
 

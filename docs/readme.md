@@ -309,11 +309,27 @@ cd ../apps_ts && npm install
 | `./start.sh --single-view` | Viewer 単画面（ローカルボクセルのみ）で起動 |
 | `./start.sh --no-detector` | Detector なしで起動 |
 | `./start.sh --no-viewer` | Viewer なしで起動 |
+| `./start.sh --raw-viewer` | フィルター前点群プレビュー (Raw Viewer) も起動 |
 | `./start.sh --install-only` | 依存関係インストールのみ（起動しない） |
 | `./start.sh --restart` | 既存プロセスをキルしてクリーン再起動 |
 | `./start.sh --stop` | 起動中のプロセスを停止（または Ctrl+C） |
 
 > **オプションは組み合わせ可能:** `./start.sh --use-airy-live --no-detector --geo-viewer` のように同時指定できます。
+
+#### Raw Viewer（フィルター前点群プレビュー）
+
+`--raw-viewer` オプションを指定すると、フィルター処理前の生点群を別タブで同時に確認できます。
+
+```bash
+./start.sh --raw-viewer
+```
+
+- **通常 Viewer:** `http://localhost:3000` — フィルター後の点群 + ボクセル + ワイヤーフレーム
+- **Raw Viewer:** `http://localhost:3000/?rawPort=8766` — フィルター前の生点群のみ
+
+リモートアクセス時は `http://<IP>:3000/?rawPort=8766` のように指定します。
+
+> **注意:** Raw Viewer を有効にすると帯域幅が約2倍になります（フィルター前後の両方を配信するため）。Jetson のメモリ・CPU 使用量も若干増加します。Raw Viewer タブを開かない限り、JSON シリアライズは発生しません。
 
 #### 環境変数で設定（カスタマイズ）
 
@@ -397,6 +413,7 @@ tail -f .logs/*.log
 | WebSocket | 8765 | 点群フレーム配信（`SASS_WS_PORT` で変更可、ブラウザは自動ホスト名解決） |
 | Airy UDP | 6699 | Airy LiDAR UDP 受信（`SASS_AIRY_PORT` で変更可、`--use-airy-live` 時のみ） |
 | Viewer (HTTP) | 3000 | Three.js ビューワー（ブラウザ） |
+| Raw Viewer WS | 8766 | フィルター前点群配信（`--raw-viewer` 指定時のみ） |
 | Geo-Viewer (HTTP) | 3001 | CesiumJS 地図ビューワー（`--geo-viewer` 指定時のみ） |
 
 #### Airy LiDAR 実機接続マニュアル

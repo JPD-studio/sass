@@ -10,6 +10,7 @@
 #    ./start.sh --no-viewer     # Viewer なしで起動
 #    ./start.sh --geo-viewer    # Geo-Viewer も起動
 #    ./start.sh --single-view   # Viewer 単画面で起動
+#    ./start.sh --raw-viewer    # フィルター前点群プレビュー (Raw Viewer) も起動
 #    ./start.sh --install-only  # 依存関係インストールのみ (起動しない)
 #    ./start.sh --restart       # 既存プロセスをキルしてクリーン再起動
 #    ./start.sh --stop          # 起動中のプロセスを停止
@@ -72,6 +73,7 @@ RUN_GEO_VIEWER=false
 RUN_DETECTOR=true
 INSTALL_ONLY=false
 VIEWER_SPLIT=true
+RAW_VIEWER_PORT=""
 
 # ──────────────────────────────────────────────────────────────────────────────
 #  引数パース
@@ -84,6 +86,7 @@ while [[ $# -gt 0 ]]; do
         --single-view)    VIEWER_SPLIT=false;   shift ;;
         --use-airy-live)  SOURCE_MODE="airy";   shift ;;
         --install-only)   INSTALL_ONLY=true;    shift ;;
+        --raw-viewer)     RAW_VIEWER_PORT=8766; shift ;;
         --restart)
             # 既存プロセスをキルして再起動
             if [[ -d "$PID_DIR" ]]; then
@@ -130,7 +133,7 @@ while [[ $# -gt 0 ]]; do
             exit 0
             ;;
         -h|--help)
-            head -24 "$0" | tail -19
+            head -25 "$0" | tail -20
             exit 0
             ;;
         *)
@@ -370,6 +373,12 @@ mkdir -p "$LOG_DIR"
 # パイプラインフィルター設定 (環境変数で追加可能)
 PIPELINE_FILTERS="${SASS_PIPELINE_FILTERS:---test-frustum}"
 
+# Raw Viewer 引数を構築
+RAW_VIEWER_ARG=""
+if [ -n "$RAW_VIEWER_PORT" ]; then
+    RAW_VIEWER_ARG="--raw-ws-port $RAW_VIEWER_PORT"
+fi
+
 if [[ "$SOURCE_MODE" == "airy" ]]; then
     # ── Airy LiDAR 実機接続モード ──
     if [[ ! -f "$AIRY_CONFIG" ]]; then
@@ -386,6 +395,7 @@ if [[ "$SOURCE_MODE" == "airy" ]]; then
             --airy-port "$AIRY_PORT" \
             --ws-port "$WS_PORT" \
             $PIPELINE_FILTERS \
+            $RAW_VIEWER_ARG \
             --verbose
         EXIT_CODE=$?
         echo "$(date '+%Y-%m-%d %H:%M:%S') [WATCHDOG] pipeline exited with code $EXIT_CODE" >> "$LOG_DIR/airy_live.log"
@@ -409,6 +419,7 @@ elif [[ -f "$PCAP_FILE" && -f "$PCAP_META" ]]; then
             --loop \
             --ws-port "$WS_PORT" \
             $PIPELINE_FILTERS \
+            $RAW_VIEWER_ARG \
             --verbose
         EXIT_CODE=$?
         echo "$(date '+%Y-%m-%d %H:%M:%S') [WATCHDOG] pipeline exited with code $EXIT_CODE" >> "$LOG_DIR/pcap_replay.log"
@@ -582,6 +593,7 @@ echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━
 echo ""
 echo -e "  ${CYAN}WebSocket${NC}   ws://0.0.0.0:$WS_PORT"
 $RUN_VIEWER     && echo -e "  ${CYAN}Viewer${NC}      http://localhost:$HTTP_PORT   (Three.js)"
+[ -n "$RAW_VIEWER_PORT" ] && echo -e "  ${CYAN}Raw Viewer${NC}  http://localhost:$HTTP_PORT/?rawPort=$RAW_VIEWER_PORT"
 $RUN_GEO_VIEWER && echo -e "  ${CYAN}Geo-Viewer${NC}  http://localhost:$GEO_HTTP_PORT  (CesiumJS)"
 $RUN_DETECTOR   && echo -e "  ${CYAN}Detector${NC}    ヘッドレスモード (ログ: .logs/detector.log)"
 echo ""
