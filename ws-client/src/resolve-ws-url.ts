@@ -1,7 +1,7 @@
 // ws-client/src/resolve-ws-url.ts
 /**
  * ブラウザ環境用 WebSocket URL 解決。
- * 優先順位: URL query ?ws= → <meta name="ws-url"> → /websocket.json → hostname:8765
+ * 優先順位: URL query ?ws= → <meta name="ws-url"> → hostname:8765
  */
 export async function resolveWsUrl(): Promise<string> {
   // 1. URL クエリパラメータ ?ws=
@@ -13,15 +13,6 @@ export async function resolveWsUrl(): Promise<string> {
   const meta = document.querySelector<HTMLMetaElement>('meta[name="ws-url"]');
   if (meta?.content) return meta.content;
 
-  // 3. /websocket.json (runtime 共通設定)
-  try {
-    const resp = await fetch("/websocket.json");
-    if (resp.ok) {
-      const json = await resp.json();
-      if (json.websocket_url) return json.websocket_url;
-    }
-  } catch { /* fallback */ }
-
-  // 4. デフォルト
+  // 3. デフォルト: アクセス元ホスト名を使用（リモートIPからも正しく接続）
   return `ws://${window.location.hostname}:8765`;
 }

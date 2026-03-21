@@ -17,14 +17,12 @@ import { IntrusionDetector } from "../../detector/src/intrusion-detector.js";
 import { AdaptiveStddevThreshold } from "../../detector/src/threshold/adaptive-stddev.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const sensorsPath = path.join(__dirname, "../sensors.json");
-const sensorsFallbackPath = path.join(__dirname, "../sensors.example.json");
 
 // configを読み込む
 let config: any;
 try {
   const content = fs.readFileSync(
-    fs.existsSync(sensorsPath) ? sensorsPath : sensorsFallbackPath,
+    path.join(__dirname, "../../config/sass.json"),
     "utf-8"
   );
   config = JSON.parse(content);
@@ -44,7 +42,7 @@ let frameId = 0;
 let connectedTime = Date.now();
 
 // WebSocket接続
-const wsUrl = resolveWsUrl(path.join(__dirname, "../../runtime/websocket.json"));
+const wsUrl = resolveWsUrl(path.join(__dirname, "../../config/websocket.json"));
 const ws = new WebSocket(wsUrl);
 
 ws.on("open", () => {

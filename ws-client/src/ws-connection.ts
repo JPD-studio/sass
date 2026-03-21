@@ -17,6 +17,7 @@ export class WsConnection {
   private _connected = false;
   private _stopped = false;
   private _callbacks: Array<(points: PointData[]) => void> = [];
+  private _rawCallbacks: Array<(data: any) => void> = [];
   private _frameQueue: PointData[][] = [];
   private _frameResolvers: Array<(value: IteratorResult<PointData[]>) => void> = [];
   private _retryCount = 0;
@@ -76,6 +77,11 @@ export class WsConnection {
    */
   onMessage(callback: (points: PointData[]) => void): void {
     this._callbacks.push(callback);
+  }
+
+  /** パース前の生データを受信するコールバック（filter_config 等の非点群メッセージ向け） */
+  onRawMessage(callback: (data: any) => void): void {
+    this._rawCallbacks.push(callback);
   }
 
   /**
@@ -142,6 +148,17 @@ export class WsConnection {
 
     this.socket.onmessage = (event: any) => {
       const data = typeof event.data === "string" ? event.data : event.data.toString();
+
+      // パース前の生メッセージコールバック（filter_config 等の非点群メッセージ向け）
+      try {
+        const parsed = JSON.parse(data);
+        if (parsed.type) {
+          // type フィールドを持つメッセージは非点群メッセージ
+          for (const cb of this._rawCallbacks) cb(parsed);
+          return;
+        }
+      } catch { /* JSON パース失敗時は通常のフレームとして処理続行 */ }
+
       const points = this._parseMessage(data);
       if (points === null) return;
 

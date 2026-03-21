@@ -120,6 +120,10 @@ class OusterPcapSource:
         rate:       再生速度倍率 (1.0=実時間, 0=最速)
         loop:       True ならループ再生
         lidar_port: UDP ポート (デフォルト: 7502)
+
+    Note:
+        Z軸反転は AxisSignFilter (FilterPipeline) で行うようになりました。
+        config/sass.json の sensors[].config.axis_sign を設定してください。
     """
 
     def __init__(
@@ -129,14 +133,12 @@ class OusterPcapSource:
         rate: float = 1.0,
         loop: bool = True,
         lidar_port: int = 7502,
-        flip_z: bool = False,
     ) -> None:
         self._pcap_path = Path(pcap_path)
         self._meta_path = Path(meta_path)
         self._rate = rate
         self._loop = loop
         self._lidar_port = lidar_port
-        self._flip_z = flip_z
 
         if not self._pcap_path.exists():
             raise FileNotFoundError(f"PCAP not found: {self._pcap_path}")
@@ -178,8 +180,8 @@ class OusterPcapSource:
         xyz_lut = XYZLut(info)
         pkt_sz = pf.lidar_packet_size
 
-        logger.info("OusterPcapSource: lidar_packet_size=%d, profile=%s, flip_z=%s",
-                     pkt_sz, info.format.udp_profile_lidar, self._flip_z)
+        logger.info("OusterPcapSource: lidar_packet_size=%d, profile=%s",
+                     pkt_sz, info.format.udp_profile_lidar)
 
         batcher = ScanBatcher(info)
         scan = LidarScan(info)
@@ -208,10 +210,6 @@ class OusterPcapSource:
                 if len(pts) == 0:
                     frame_id += 1
                     continue
-
-                # Z軸反転 (物理的に下向き設置されたセンサー用)
-                if self._flip_z:
-                    pts[:, 2] = -pts[:, 2]
 
                 # レート制御
                 if self._rate > 0 and frame_id > 0 and first_ts is not None:

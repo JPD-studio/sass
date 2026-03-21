@@ -1,4 +1,8 @@
 {
+  "voxel_mode": "local",
+  "voxel_cell_size": 1.0,
+  "global_voxel_unit_m": 10.0,
+  "global_grid_mode": "wgs84",
   "coin": {},
   "mount": {
     "position": {

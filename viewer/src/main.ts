@@ -83,6 +83,11 @@ function buildMount(cfg: ViewerConfig): SensorMount | null {
   const unitM     = config.global_voxel_unit_m ?? 10.0;
   const gridMode  = config.global_grid_mode ?? "wgs84";
 
+  // ── デバッグ出力 ──
+  console.log("[VIEWER] WebSocket URL:", WS_URL);
+  console.log("[VIEWER] window.location.hostname:", window.location.hostname);
+  console.log("[VIEWER] voxel_mode:", voxelMode);
+
   // ── WebSocket 接続 (共通) ──
   const conn = new WsConnection({ url: WS_URL, reconnectInterval: 3000 });
 
@@ -120,7 +125,8 @@ function buildMount(cfg: ViewerConfig): SensorMount | null {
     // 左: ローカルボクセル
     dispLeft.register(new PointCloudLayer(viewerLeft));
     dispLeft.register(new VoxelLayer(viewerLeft, cellSize));
-    dispLeft.register(new RangeWireframeLayer(viewerLeft.scene));
+    const wireframeLeft = new RangeWireframeLayer(viewerLeft.scene);
+    dispLeft.register(wireframeLeft);
     new LayerPanel(containerLeft, dispLeft);
 
     // 右: グローバルボクセル
@@ -134,8 +140,20 @@ function buildMount(cfg: ViewerConfig): SensorMount | null {
       dispRight.register(new VoxelLayer(viewerRight, cellSize));
       console.warn("[viewer] both モードで mount 未設定: 右ペインをローカルモードで代替");
     }
-    dispRight.register(new RangeWireframeLayer(viewerRight.scene));
+    const wireframeRight = new RangeWireframeLayer(viewerRight.scene);
+    dispRight.register(wireframeRight);
     new LayerPanel(containerRight, dispRight);
+
+    // filter_config メッセージでワイヤーフレーム更新
+    conn.onRawMessage((msg) => {
+      if (msg.type === "filter_config") {
+        if (msg.frustum)    { wireframeLeft.updateConfig(msg.frustum);            wireframeRight.updateConfig(msg.frustum); }
+        if (msg.cylindrical){ wireframeLeft.updateCylindricalConfig(msg.cylindrical); wireframeRight.updateCylindricalConfig(msg.cylindrical); }
+        if (msg.spherical)  { wireframeLeft.updateSphericalConfig(msg.spherical); wireframeRight.updateSphericalConfig(msg.spherical); }
+        if (msg.box)        { wireframeLeft.updateBoxConfig(msg.box);             wireframeRight.updateBoxConfig(msg.box); }
+        if (msg.polygon)    { wireframeLeft.updatePolygonConfig(msg.polygon);     wireframeRight.updatePolygonConfig(msg.polygon); }
+      }
+    });
 
     conn.onMessage((points) => {
       dispLeft.dispatch(points);
@@ -187,8 +205,20 @@ function buildMount(cfg: ViewerConfig): SensorMount | null {
       console.log(`[viewer] ローカルモード: cellSize=${cellSize}m`);
     }
 
-    dispatcher.register(new RangeWireframeLayer(viewer.scene));
+    const wireframeSingle = new RangeWireframeLayer(viewer.scene);
+    dispatcher.register(wireframeSingle);
     new LayerPanel(container, dispatcher);
+
+    // filter_config メッセージでワイヤーフレーム更新
+    conn.onRawMessage((msg) => {
+      if (msg.type === "filter_config") {
+        if (msg.frustum)    wireframeSingle.updateConfig(msg.frustum);
+        if (msg.cylindrical) wireframeSingle.updateCylindricalConfig(msg.cylindrical);
+        if (msg.spherical)  wireframeSingle.updateSphericalConfig(msg.spherical);
+        if (msg.box)        wireframeSingle.updateBoxConfig(msg.box);
+        if (msg.polygon)    wireframeSingle.updatePolygonConfig(msg.polygon);
+      }
+    });
 
     conn.onMessage((points) => {
       dispatcher.dispatch(points);

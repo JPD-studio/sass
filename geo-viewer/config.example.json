@@ -1,10 +1,4 @@
 {
-  "voxel_cell_size": 1.0,
-  "detector": {
-    "strategy": "adaptive-stddev",
-    "sigma": 2.0,
-    "min_background_samples": 30
-  },
   "mount": {
     "position": {
       "lat": 34.649394,

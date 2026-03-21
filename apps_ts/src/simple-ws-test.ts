@@ -8,7 +8,7 @@ import { dirname, join } from "path";
 import { resolveWsUrl } from "../../ws-client/src/resolve-ws-url-node.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const url = resolveWsUrl(join(__dirname, "../../runtime/websocket.json"));
+const url = resolveWsUrl(join(__dirname, "../../config/websocket.json"));
 
 const ws = new WebSocket(url);
 

@@ -41,6 +41,7 @@ class WebSocketTransport(TransportBase):
         self.port = port
         self._clients: Set[ServerConnection] = set()
         self._server: Optional[websockets.asyncio.server.Server] = None
+        self._last_raw: Optional[str] = None  # 新規接続時に再送する最新ブロードキャスト
 
     # ------------------------------------------------------------------ #
     # TransportBase 実装                                                   #
@@ -72,6 +73,19 @@ class WebSocketTransport(TransportBase):
                 dead.add(ws)
         self._clients -= dead
 
+    async def broadcast_raw(self, payload: str) -> None:
+        """接続中の全クライアントに任意の JSON 文字列を送信する。"""
+        self._last_raw = payload  # 最新ペイロードを保持（新規接続時再送用）
+        if not self._clients:
+            return
+        dead: Set[ServerConnection] = set()
+        for ws in list(self._clients):
+            try:
+                await ws.send(payload)
+            except websockets.ConnectionClosed:
+                dead.add(ws)
+        self._clients -= dead
+
     # ------------------------------------------------------------------ #
     # 内部ヘルパー                                                         #
     # ------------------------------------------------------------------ #
@@ -81,6 +95,14 @@ class WebSocketTransport(TransportBase):
         self._clients.add(websocket)
         remote = getattr(websocket, 'remote_address', 'unknown')
         logger.info("WebSocketTransport: client connected from %s (%d total)", remote, len(self._clients))
+
+        # 新規接続クライアントに最新 effective config を即座に再送
+        if self._last_raw is not None:
+            try:
+                await websocket.send(self._last_raw)
+            except websockets.ConnectionClosed:
+                pass
+
         try:
             await websocket.wait_closed()
         except Exception as e:

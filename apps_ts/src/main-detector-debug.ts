@@ -4,22 +4,16 @@
  */
 import { WsConnection } from "../../ws-client/src/ws-connection.js";
 import { resolveWsUrl } from "../../ws-client/src/resolve-ws-url-node.js";
-import { createRequire } from "module";
-import { existsSync } from "fs";
+import { readFileSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const sensorsJsonPath = join(__dirname, "../sensors.json");
-const sensorsFallbackPath = join(__dirname, "../sensors.example.json");
-const _require = createRequire(import.meta.url);
-const config = existsSync(sensorsJsonPath)
-  ? _require(sensorsJsonPath)
-  : _require(sensorsFallbackPath);
+const config = JSON.parse(readFileSync(join(__dirname, "../../config/sass.json"), "utf-8"));
 
 console.log("[DEBUG] Config loaded:", config);
 
-const wsUrl = resolveWsUrl(join(__dirname, "../../runtime/websocket.json"));
+const wsUrl = resolveWsUrl(join(__dirname, "../../config/websocket.json"));
 const conn = new WsConnection({
   url: wsUrl,
   reconnectInterval: 3000,

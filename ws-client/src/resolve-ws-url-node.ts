@@ -1,7 +1,7 @@
 // ws-client/src/resolve-ws-url-node.ts
 /**
  * Node.js 環境用 WebSocket URL 解決。
- * runtime/websocket.json から読み込み、なければデフォルト値を返す。
+ * config/websocket.json から読み込み、なければデフォルト値を返す。
  */
 import { readFileSync, existsSync } from "fs";
 

@@ -4,7 +4,8 @@
 # =============================================================================
 #
 #  使い方:
-#    ./start.sh                 # デフォルト: Viewer スプリット画面 (Geo-Viewer スキップ)
+#    ./start.sh                 # デフォルト: PCAP + Viewer スプリット画面
+#    ./start.sh --use-airy-live # Airy LiDAR 実機接続モード
 #    ./start.sh --no-detector   # Detector なしで起動
 #    ./start.sh --no-viewer     # Viewer なしで起動
 #    ./start.sh --geo-viewer    # Geo-Viewer も起動
@@ -40,12 +41,19 @@ cd "$SCRIPT_DIR"
 PID_DIR="$SCRIPT_DIR/.pids"
 LOG_DIR="$SCRIPT_DIR/.logs"
 
+# ソースモード (pcap | airy)
+SOURCE_MODE="pcap"
+
 # PCAP リプレイ設定
 PCAP_FILE="${SASS_PCAP:-pcap/demo1.pcap}"
 PCAP_META="${SASS_PCAP_META:-pcap/demo1.json}"
 PCAP_RATE="${SASS_PCAP_RATE:-1.0}"
 
-# ポート
+# Airy 実機設定
+AIRY_PORT="${SASS_AIRY_PORT:-6699}"
+AIRY_CONFIG="config/sass.json"
+
+# ポート（SASS_WS_PORT 環境変数でオーバーライド可能）
 WS_PORT=8765
 HTTP_PORT=3000
 GEO_HTTP_PORT=3001
@@ -74,6 +82,7 @@ while [[ $# -gt 0 ]]; do
         --geo-viewer)     RUN_GEO_VIEWER=true;  shift ;;
         --no-detector)    RUN_DETECTOR=false;   shift ;;
         --single-view)    VIEWER_SPLIT=false;   shift ;;
+        --use-airy-live)  SOURCE_MODE="airy";   shift ;;
         --install-only)   INSTALL_ONLY=true;    shift ;;
         --restart)
             # 既存プロセスをキルして再起動
@@ -194,6 +203,27 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 # ──────────────────────────────────────────────────────────────────────────────
+#  自動クリーンアップ: 既存プロセスを無条件に停止してから起動する
+#  理由: ./start.sh を --restart なしで再実行すると旧プロセスが残り、
+#        WebSocket ポート (8765) が既に使用中になって新プロセスが起動失敗する。
+# ──────────────────────────────────────────────────────────────────────────────
+if [[ -d "$PID_DIR" ]]; then
+    _had_procs=false
+    for pidfile in "$PID_DIR"/*.pid; do
+        [[ -f "$pidfile" ]] || continue
+        pid=$(cat "$pidfile")
+        name=$(basename "$pidfile" .pid)
+        if kill -0 "$pid" 2>/dev/null; then
+            kill "$pid" 2>/dev/null || true
+            wait "$pid" 2>/dev/null || true
+            echo -e "  ${YELLOW}!${NC} 旧プロセス $name (PID $pid) を停止しました"
+            _had_procs=true
+        fi
+        rm -f "$pidfile"
+    done
+    rmdir "$PID_DIR" 2>/dev/null || true
+    $_had_procs && echo -e "  ${GREEN}✓${NC} 旧プロセスのクリーンアップ完了"
+fi
 #  ステップ 0: 前提条件チェック
 # ──────────────────────────────────────────────────────────────────────────────
 log_step "ステップ 0: 前提条件チェック"
@@ -312,23 +342,23 @@ if $INSTALL_ONLY; then
 fi
 
 # ──────────────────────────────────────────────────────────────────────────────
-#  ステップ 4c: WebSocket 共通設定 (runtime/websocket.json)
+#  ステップ 4c: WebSocket 共通設定
 # ──────────────────────────────────────────────────────────────────────────────
 log_step "ステップ 4c: WebSocket 共通設定"
 
-mkdir -p runtime
-cat > runtime/websocket.json <<EOF
-{
-  "websocket_url": "ws://127.0.0.1:$WS_PORT"
-}
-EOF
-log_ok "runtime/websocket.json を生成しました (ws://127.0.0.1:$WS_PORT)"
+# WebSocket ポート設定（環境変数でオーバーライド可能）
+if [ -n "${SASS_WS_PORT:-}" ]; then
+    WS_PORT="$SASS_WS_PORT"
+fi
 
-# ブラウザアプリ用に配信ディレクトリへコピー
-cp runtime/websocket.json viewer/websocket.json 2>/dev/null && \
-    log_ok "viewer/websocket.json へコピー" || true
-cp runtime/websocket.json geo-viewer/websocket.json 2>/dev/null && \
-    log_ok "geo-viewer/websocket.json へコピー" || true
+# 旧バージョンの start.sh が生成した viewer/websocket.json を削除
+# （ws://127.0.0.1:8765 固定になるため）
+rm -f viewer/websocket.json geo-viewer/websocket.json
+
+# ※ WebSocket URL はブラウザ側で自動解決（resolveWsUrl）
+# 優先順位: URL クエリ ?ws= →<meta name="ws-url"> → hostname:8765
+# 複数のホスト（localhost, 127.0.0.1, IP アドレスなど）からのアクセスに対応
+log_ok "WebSocket: ポート $WS_PORT（ホスト自動解決）"
 
 # ──────────────────────────────────────────────────────────────────────────────
 #  ステップ 5: パイプライン起動 (ソース → フィルター → WebSocket)
@@ -340,7 +370,34 @@ mkdir -p "$LOG_DIR"
 # パイプラインフィルター設定 (環境変数で追加可能)
 PIPELINE_FILTERS="${SASS_PIPELINE_FILTERS:---test-frustum}"
 
-if [[ -f "$PCAP_FILE" && -f "$PCAP_META" ]]; then
+if [[ "$SOURCE_MODE" == "airy" ]]; then
+    # ── Airy LiDAR 実機接続モード ──
+    if [[ ! -f "$AIRY_CONFIG" ]]; then
+        log_err "設定ファイルが見つかりません: $AIRY_CONFIG"
+        log_warn "config/sass.json の sensors セクションを確認してください"
+        exit 1
+    fi
+    log_info "ソース: Airy LiDAR 実機 (UDP :$AIRY_PORT, config=$AIRY_CONFIG)"
+    log_info "フィルター: $PIPELINE_FILTERS"
+    (
+        PYTHONPATH="$SCRIPT_DIR" python3 apps/run_pipeline.py \
+            --use-airy-live \
+            --config "$AIRY_CONFIG" \
+            --airy-port "$AIRY_PORT" \
+            --ws-port "$WS_PORT" \
+            $PIPELINE_FILTERS \
+            --verbose
+        EXIT_CODE=$?
+        echo "$(date '+%Y-%m-%d %H:%M:%S') [WATCHDOG] pipeline exited with code $EXIT_CODE" >> "$LOG_DIR/airy_live.log"
+        echo "$(date '+%Y-%m-%d %H:%M:%S') [WATCHDOG] dmesg (last 10 lines):" >> "$LOG_DIR/airy_live.log"
+        dmesg | tail -10 >> "$LOG_DIR/airy_live.log" 2>/dev/null || true
+    ) > "$LOG_DIR/airy_live.log" 2>&1 &
+    REPLAY_PID=$!
+    save_pid "airy_live" "$REPLAY_PID"
+    log_ok "パイプライン起動 (PID $REPLAY_PID, Airy 実機 + フィルター)"
+
+elif [[ -f "$PCAP_FILE" && -f "$PCAP_META" ]]; then
+    # ── PCAP リプレイモード（デフォルト）──
     log_info "ソース: PCAP リプレイ ($PCAP_FILE)"
     log_info "フィルター: $PIPELINE_FILTERS"
     (
@@ -393,26 +450,40 @@ if $RUN_VIEWER; then
     log_step "ステップ 6: Viewer 起動 (HTTP :$HTTP_PORT)"
 
     # voxel_mode を決定
-    VIEWER_VOXEL_MODE="local"
+    VIEWER_VOXEL_MODE="${SASS_VOXEL_MODE:-local}"
     $VIEWER_SPLIT && VIEWER_VOXEL_MODE="both"
 
     # viewer/config.json が存在する場合は保護、ない場合だけ生成
     if [ ! -f "viewer/config.json" ]; then
         log_info "viewer/config.json を初期化中..."
         python3 -c "
-import json, pathlib
-src = pathlib.Path('apps_ts/sensors.example.json').read_text()
-obj = json.loads(src)
+import json, pathlib, sys
+sass_path = pathlib.Path('config/sass.json')
+if not sass_path.exists():
+    print('Warning: config/sass.json not found, using defaults', file=sys.stderr)
+    obj = {}
+else:
+    try:
+        obj = json.loads(sass_path.read_text())
+    except json.JSONDecodeError as e:
+        print(f'Warning: config/sass.json parse error: {e}, using defaults', file=sys.stderr)
+        obj = {}
+inst = obj.get('installation', {})
 config = {
     'voxel_mode': '$VIEWER_VOXEL_MODE',
-    'voxel_cell_size': 1.0,
+    'voxel_cell_size': obj.get('voxel_cell_size', 1.0),
     'global_voxel_unit_m': 10.0,
     'global_grid_mode': 'wgs84',
     'coin': {},
-    'mount': obj.get('mount', {
-        'position': {'lat': 0, 'lng': 0, 'alt': 0},
-        'orientation': {'heading': 0, 'pitch': 0, 'roll': 0}
-    })
+    'mount': {
+        'position': {
+            'lat': inst.get('reference_latitude', 0.0),
+            'lng': inst.get('reference_longitude', 0.0),
+            'alt': inst.get('reference_altitude', 0.0)
+        },
+        'orientation': inst.get('orientation', {'heading': 0.0, 'pitch': 0.0, 'roll': 0.0}),
+        'mounting_type': inst.get('mounting_type', 'pole_mounted')
+    }
 }
 print(json.dumps(config, indent=2, ensure_ascii=False))
 " > viewer/config.json
@@ -421,7 +492,7 @@ print(json.dumps(config, indent=2, ensure_ascii=False))
         log_ok "viewer/config.json は既に存在します（保護されます）"
     fi
 
-    (cd viewer && npx http-server . -p "$HTTP_PORT" --cors -s \
+    (cd viewer && npx http-server . -p "$HTTP_PORT" --cors -s --no-cache \
         > "$LOG_DIR/viewer.log" 2>&1) &
     VIEWER_PID=$!
     save_pid "viewer" "$VIEWER_PID"
@@ -444,15 +515,28 @@ if $RUN_GEO_VIEWER; then
     if [ ! -f "geo-viewer/config.json" ]; then
         log_info "geo-viewer/config.json を初期化中..."
         python3 -c "
-import json, pathlib
-src = pathlib.Path('apps_ts/sensors.example.json').read_text()
-obj = json.loads(src)
+import json, pathlib, sys
+sass_path = pathlib.Path('config/sass.json')
+if not sass_path.exists():
+    print('Warning: config/sass.json not found, using defaults', file=sys.stderr)
+    obj = {}
+else:
+    try:
+        obj = json.loads(sass_path.read_text())
+    except json.JSONDecodeError as e:
+        print(f'Warning: config/sass.json parse error: {e}, using defaults', file=sys.stderr)
+        obj = {}
+inst = obj.get('installation', {})
 config = {
-    'coin': {},
-    'mount': obj.get('mount', {
-        'position': {'lat': 0, 'lng': 0, 'alt': 0},
-        'orientation': {'heading': 0, 'pitch': 0, 'roll': 0}
-    })
+    'mount': {
+        'position': {
+            'lat': inst.get('reference_latitude', 0.0),
+            'lng': inst.get('reference_longitude', 0.0),
+            'alt': inst.get('reference_altitude', 0.0)
+        },
+        'orientation': inst.get('orientation', {'heading': 0.0, 'pitch': 0.0, 'roll': 0.0}),
+        'mounting_type': inst.get('mounting_type', 'pole_mounted')
+    }
 }
 print(json.dumps(config, indent=2, ensure_ascii=False))
 " > geo-viewer/config.json
@@ -479,19 +563,6 @@ fi
 # ──────────────────────────────────────────────────────────────────────────────
 if $RUN_DETECTOR; then
     log_step "ステップ 7: Detector 起動 (ヘッドレス侵入検知)"
-
-    # ローカル実行用の sensors.json を生成 (WS URL をローカルホストに上書き)
-    if [[ ! -f apps_ts/sensors.json ]]; then
-        python3 -c "
-import json, pathlib
-src = pathlib.Path('apps_ts/sensors.example.json').read_text()
-obj = json.loads(src)
-print(json.dumps(obj, indent=2, ensure_ascii=False))
-" > apps_ts/sensors.json
-        log_ok "apps_ts/sensors.json を生成しました"
-    else
-        log_ok "apps_ts/sensors.json が既に存在します"
-    fi
 
     (cd apps_ts && node --loader ts-node/esm src/main-detector.ts \
         > "$LOG_DIR/detector.log" 2>&1) &
