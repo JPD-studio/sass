@@ -1,5 +1,8 @@
 {
-  "_comment": "enabled: true のセンサーのみ USC に登録されます。センサーを切り替えるには使用したいエントリを true、他を false にしてください。",
+  "_comment": "SASS 統合設定 — センサー HW、フィルタ、設置情報、検出器パラメータ",
+
+  "voxel_cell_size": 1.0,
+
   "sensors": [
     {
       "enabled": true,
@@ -15,7 +18,8 @@
         "vertical_fov_deg": 90.0,
         "max_range_m": 120.0,
         "range_resolution_m": 0.02,
-        "velocity_resolution_mps": 0.1
+        "velocity_resolution_mps": 0.1,
+        "axis_sign": { "x": 1, "y": 1, "z": 1 }
       },
       "transform": {
         "translation": [0.0, 0.0, 0.0],
@@ -36,7 +40,8 @@
         "vertical_fov_deg": 45.0,
         "max_range_m": 120.0,
         "range_resolution_m": 0.02,
-        "velocity_resolution_mps": 0.1
+        "velocity_resolution_mps": 0.1,
+        "axis_sign": { "x": 1, "y": 1, "z": 1 }
       },
       "transform": {
         "translation": [0.0, 0.0, 0.0],
@@ -57,7 +62,8 @@
         "vertical_fov_deg": 25.0,
         "max_range_m": 25.0,
         "range_resolution_m": 0.05,
-        "velocity_resolution_mps": 0.1
+        "velocity_resolution_mps": 0.1,
+        "axis_sign": { "x": 1, "y": 1, "z": 1 }
       },
       "transform": {
         "translation": [0.0, 0.0, 0.0],
@@ -78,7 +84,8 @@
         "vertical_fov_deg": 30.0,
         "max_range_m": 100.0,
         "range_resolution_m": 0.1,
-        "velocity_resolution_mps": 0.1
+        "velocity_resolution_mps": 0.1,
+        "axis_sign": { "x": 1, "y": 1, "z": 1 }
       },
       "transform": {
         "translation": [0.0, 0.0, 0.0],
@@ -99,7 +106,8 @@
         "vertical_fov_deg": 40.0,
         "max_range_m": 200.0,
         "range_resolution_m": 0.1,
-        "velocity_resolution_mps": 0.1
+        "velocity_resolution_mps": 0.1,
+        "axis_sign": { "x": 1, "y": 1, "z": 1 }
       },
       "transform": {
         "translation": [0.0, 0.0, 0.0],
@@ -120,7 +128,8 @@
         "vertical_fov_deg": 30.0,
         "max_range_m": 60.0,
         "range_resolution_m": 0.04,
-        "velocity_resolution_mps": 0.05
+        "velocity_resolution_mps": 0.05,
+        "axis_sign": { "x": 1, "y": 1, "z": 1 }
       },
       "transform": {
         "translation": [0.0, 0.0, 0.0],
@@ -141,7 +150,8 @@
         "vertical_fov_deg": 30.0,
         "max_range_m": 60.0,
         "range_resolution_m": 0.04,
-        "velocity_resolution_mps": 0.05
+        "velocity_resolution_mps": 0.05,
+        "axis_sign": { "x": 1, "y": 1, "z": 1 }
       },
       "transform": {
         "translation": [0.0, 0.0, 0.0],
@@ -149,6 +159,7 @@
       }
     }
   ],
+
   "installation": {
     "reference_description": "明石市立天文科学館 時計台（日本標準時子午線 東経135度00分 真上）",
     "reference_latitude": 34.649394,
@@ -156,6 +167,78 @@
     "reference_altitude": 54.0,
     "reference_datum": "WGS84",
     "sensor_offset": [0.0, 0.0, 1.0],
-    "sensor_offset_description": "離着陸面から LiDAR 設置高さ（マスト高さ確定後に変更）"
+    "sensor_offset_description": "離着陸面から LiDAR 設置高さ（マスト高さ確定後に変更）",
+    "orientation": {
+      "heading": 0.0,
+      "pitch": 0.0,
+      "roll": 0.0
+    },
+    "mounting_type": "pole_mounted"
+  },
+
+  "filters": {
+    "frustum": {
+      "enabled": true,
+      "wireframe": true,
+      "r_bottom": 1.775,
+      "r_top": 2.5,
+      "height": 32.0,
+      "z_bottom": -2.0
+    },
+    "ror": {
+      "enabled": false,
+      "radius": 0.3,
+      "min_neighbors": 5,
+      "distance_scale": 0.0
+    },
+    "coordinate_transform": {
+      "enabled": false,
+      "azimuth": 0.0,
+      "elevation": 0.0,
+      "tx": 0.0,
+      "ty": 0.0,
+      "tz": 0.0
+    },
+    "cylindrical": {
+      "enabled": false,
+      "wireframe": true,
+      "radius": 50.0,
+      "z_min": -20.0,
+      "z_max": 30.0
+    },
+    "spherical": {
+      "enabled": false,
+      "wireframe": true,
+      "radius": 30.0,
+      "cx": 0.0,
+      "cy": 0.0,
+      "cz": 0.0,
+      "invert": false
+    },
+    "box": {
+      "enabled": false,
+      "wireframe": true,
+      "x_min": -25.0,
+      "x_max": 25.0,
+      "y_min": -25.0,
+      "y_max": 25.0,
+      "z_min": -20.0,
+      "z_max": 30.0,
+      "invert": false
+    },
+    "polygon": {
+      "enabled": false,
+      "wireframe": true,
+      "vertices": [],
+      "z_min": -20.0,
+      "z_max": 30.0,
+      "invert": false
+    }
+  },
+
+  "detector": {
+    "strategy": "adaptive-stddev",
+    "sigma": 2.0,
+    "min_background_samples": 30
   }
 }

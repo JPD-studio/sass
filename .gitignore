@@ -33,13 +33,8 @@ Thumbs.db
 
 # アプリ層の環境固有設定
 apps/sensors.json
-apps_ts/sensors.json
 apps/secrets.json
 apps_ts/secrets.json
-
-# テンプレートはGit管理OK
-!apps/sensors.example.json
-!apps_ts/sensors.example.json
 
 # pytest
 .pytest_cache/
@@ -53,3 +48,14 @@ htmlcov/
 pcap/
 *.pcap
 demo.pcap
+.logs/
+# ランタイム生成ファイル
+runtime/
+
+# start.sh がコピーする配信用ファイル
+viewer/websocket.json
+geo-viewer/websocket.json
+
+# start.sh が初回生成する設定（ユーザーがカスタマイズする可能性あり）
+viewer/config.json
+geo-viewer/config.json

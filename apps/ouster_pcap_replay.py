@@ -21,16 +21,31 @@ import argparse
 import asyncio
 import json
 import logging
+import os
+import resource
 import struct
 import sys
 import time
+import traceback
 import warnings
 from pathlib import Path
-from typing import Iterator, Tuple
+from typing import Dict, Iterator, Tuple
 
 import numpy as np
 
 logger = logging.getLogger(__name__)
+
+
+def _log_resource_usage(label: str = "") -> None:
+    """RSS メモリ使用量と FD 数をログに出力するユーティリティ。"""
+    try:
+        ru = resource.getrusage(resource.RUSAGE_SELF)
+        rss_mb = ru.ru_maxrss / 1024  # Linux: KB → MB
+        pid = os.getpid()
+        fd_count = len(os.listdir(f"/proc/{pid}/fd"))
+        logger.info("[RESOURCE %s] PID=%d RSS=%.1f MB, FDs=%d", label, pid, rss_mb, fd_count)
+    except Exception as e:
+        logger.debug("[RESOURCE] 取得失敗: %s", e)
 
 
 # ------------------------------------------------------------------ #
@@ -166,6 +181,9 @@ async def replay(pcap_path: Path, meta_path: Path,
                  host: str, port: int, rate: float, loop_forever: bool) -> None:
     from cepf_sdk.transport.websocket_server import WebSocketTransport
 
+    logger.info("[DIAG] replay() 開始: PID=%d", os.getpid())
+    _log_resource_usage("STARTUP")
+
     transport = WebSocketTransport(host=host, port=port)
     await transport.start()
     logger.info("WebSocket サーバー起動: ws://%s:%d", host, port)
@@ -178,6 +196,8 @@ async def replay(pcap_path: Path, meta_path: Path,
         logger.info("クライアント接続。PCAP 読み込みを開始します...")
 
     pass_num = 0
+    total_send_errors = 0
+    total_frames_sent = 0
     while True:
         pass_num += 1
         logger.info("パス %d: ストリーミング開始 (%s)", pass_num, pcap_path.name)
@@ -185,53 +205,82 @@ async def replay(pcap_path: Path, meta_path: Path,
         frame_id   = 0
         first_ts   = None
         start_mono = time.monotonic()
+        pass_send_errors = 0
 
-        for ts, pts in iter_frames(pcap_path, meta_path):
-            if first_ts is None:
-                first_ts = ts
+        try:
+            for ts, pts in iter_frames(pcap_path, meta_path):
+                if first_ts is None:
+                    first_ts = ts
 
-            if rate > 0 and frame_id > 0:
-                elapsed_pcap = ts - first_ts
-                elapsed_real = (time.monotonic() - start_mono) * rate
-                wait = elapsed_pcap / rate - (time.monotonic() - start_mono)
-                if wait > 0:
-                    await asyncio.sleep(wait)
+                if rate > 0 and frame_id > 0:
+                    elapsed_pcap = ts - first_ts
+                    elapsed_real = (time.monotonic() - start_mono) * rate
+                    wait = elapsed_pcap / rate - (time.monotonic() - start_mono)
+                    if wait > 0:
+                        await asyncio.sleep(wait)
 
-            if pts is not None and len(pts) > 0:
-                payload_str = json.dumps({
-                    "frame_id": frame_id,
-                    "timestamp": float(ts),
-                    "points": {
-                        "x": pts[:, 0].tolist(),
-                        "y": pts[:, 1].tolist(),
-                        "z": pts[:, 2].tolist(),
-                    },
-                })
+                if pts is not None and len(pts) > 0:
+                    payload_str = json.dumps({
+                        "frame_id": frame_id,
+                        "timestamp": float(ts),
+                        "points": {
+                            "x": pts[:, 0].tolist(),
+                            "y": pts[:, 1].tolist(),
+                            "z": pts[:, 2].tolist(),
+                        },
+                    })
 
-                if transport.client_count > 0:
-                    from websockets.exceptions import ConnectionClosed
-                    dead = set()
-                    for ws in list(transport._clients):
-                        try:
-                            await ws.send(payload_str)
-                        except ConnectionClosed:
-                            dead.add(ws)
-                    transport._clients -= dead
+                    payload_kb = len(payload_str) / 1024
 
-                if frame_id % 20 == 0:
-                    logger.info("  フレーム %d  (%d 点)", frame_id, len(pts))
+                    if transport.client_count > 0:
+                        from websockets.exceptions import ConnectionClosed
+                        dead = set()
+                        for ws in list(transport._clients):
+                            try:
+                                await ws.send(payload_str)
+                            except ConnectionClosed as e:
+                                dead.add(ws)
+                                pass_send_errors += 1
+                                total_send_errors += 1
+                                logger.warning("[DIAG] WebSocket send ConnectionClosed: %s (total_errors=%d)", e, total_send_errors)
+                            except Exception as e:
+                                dead.add(ws)
+                                pass_send_errors += 1
+                                total_send_errors += 1
+                                logger.error("[DIAG] WebSocket send unexpected error: %s\n%s", e, traceback.format_exc())
+                        transport._clients -= dead
+                        if dead:
+                            logger.info("[DIAG] 切断クライアント除去: %d 件, 残り %d 件", len(dead), transport.client_count)
 
-            frame_id += 1
-            # 他の非同期タスクに制御を渡す
-            if frame_id % 4 == 0:
-                await asyncio.sleep(0)
+                    if frame_id % 20 == 0:
+                        logger.info("  フレーム %d  (%d 点, %.1f KB, clients=%d)",
+                                    frame_id, len(pts), payload_kb, transport.client_count)
 
-        logger.info("パス %d 完了 (%d フレーム)", pass_num, frame_id)
+                    # 100フレームごとにリソースを記録
+                    if frame_id % 100 == 0:
+                        _log_resource_usage(f"PASS{pass_num}_F{frame_id}")
+
+                frame_id += 1
+                total_frames_sent += 1
+                # 他の非同期タスクに制御を渡す
+                if frame_id % 4 == 0:
+                    await asyncio.sleep(0)
+
+        except Exception as e:
+            logger.error("[DIAG] パス %d フレーム処理中に例外: %s\n%s", pass_num, e, traceback.format_exc())
+
+        elapsed_pass = time.monotonic() - start_mono
+        logger.info("パス %d 完了 (%d フレーム, %.1f 秒, send_errors=%d, total_sent=%d)",
+                    pass_num, frame_id, elapsed_pass, pass_send_errors, total_frames_sent)
+        _log_resource_usage(f"PASS{pass_num}_END")
+
         if not loop_forever:
             break
         logger.info("ループ再生: 2 秒後に再スタート...")
         await asyncio.sleep(2.0)
 
+    logger.info("[DIAG] replay() 終了: total_passes=%d, total_frames=%d, total_send_errors=%d",
+                pass_num, total_frames_sent, total_send_errors)
     await transport.stop()
 
 
@@ -264,7 +313,15 @@ def main() -> None:
     if not meta_path.exists():
         logger.error("メタ JSON が見つかりません: %s", meta_path); sys.exit(1)
 
-    asyncio.run(replay(pcap_path, meta_path, args.host, args.port, args.rate, args.loop))
+    try:
+        asyncio.run(replay(pcap_path, meta_path, args.host, args.port, args.rate, args.loop))
+    except KeyboardInterrupt:
+        logger.info("[DIAG] KeyboardInterrupt で停止")
+    except Exception as e:
+        logger.error("[DIAG] 予期せぬトップレベル例外: %s\n%s", e, traceback.format_exc())
+        sys.exit(1)
+    finally:
+        logger.info("[DIAG] main() 終了 (PID=%d)", os.getpid())
 
 
 if __name__ == "__main__":

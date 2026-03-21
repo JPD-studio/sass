@@ -1,0 +1,15 @@
+{
+  "mount": {
+    "position": {
+      "lat": 34.649394,
+      "lng": 135.001478,
+      "alt": 54.0
+    },
+    "orientation": {
+      "heading": 0.0,
+      "pitch": 0.0,
+      "roll": 0.0
+    },
+    "mounting_type": "pole_mounted"
+  }
+}

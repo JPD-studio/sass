@@ -3,16 +3,26 @@
  * ヘッドレス検知エントリーポイント。
  * WsConnection でフレームを受信し、背景学習 → 差分計算 → 侵入検知を行う。
  */
-import { WsConnection } from "../../ws-client/src/ws-connection.js";
+import { WsConnection } from "../../ws-client/src/ws-connection-node.js";
+import { resolveWsUrl } from "../../ws-client/src/resolve-ws-url-node.js";
 import { VoxelGrid } from "../../voxel/src/voxel-grid.js";
 import { BackgroundVoxelMap } from "../../voxel/src/background-voxel-map.js";
 import { computeDiff } from "../../voxel/src/voxel-diff.js";
 import { IntrusionDetector } from "../../detector/src/intrusion-detector.js";
 import { AdaptiveStddevThreshold } from "../../detector/src/threshold/adaptive-stddev.js";
-import config from "../sensors.example.json" with { type: "json" };
+import { readFileSync } from "fs";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
 
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const config: {
+  voxel_cell_size: number;
+  detector: { strategy: string; sigma: number; min_background_samples: number };
+} = JSON.parse(readFileSync(join(__dirname, "../../config/sass.json"), "utf-8"));
+
+const wsUrl = resolveWsUrl(join(__dirname, "../../config/websocket.json"));
 const conn = new WsConnection({
-  url: config.websocket_url,
+  url: wsUrl,
   reconnectInterval: 3000,
 });
 

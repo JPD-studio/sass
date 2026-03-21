@@ -24,7 +24,7 @@ export class VoxelLayer implements RenderLayer {
   onFrame(points: PointData[], frameId: number): void {
     this._grid.clear();
     for (const p of points) {
-      this._grid.addPoint(p.x, p.y, -p.z, frameId); // センサーフレームの Z は下向き → 反転
+      this._grid.addPoint(p.x, p.y, p.z, frameId); // Ouster は Z-up 座標系 — 反転不要
     }
     this._viewer.updateVoxels(this._grid.snapshot(), this._cellSize);
   }

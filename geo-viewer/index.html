@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SASS Geo-Viewer (CesiumJS)</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
+
+    #cesiumContainer {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+    }
+
+    #info-panel {
+      position: absolute;
+      top: 10px; right: 10px;
+      background: rgba(0, 0, 0, 0.6);
+      color: #fff;
+      padding: 10px 14px;
+      border-radius: 6px;
+      font-family: monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      pointer-events: none;
+    }
+
+    #info-panel h3 {
+      font-size: 14px;
+      margin-bottom: 6px;
+      color: #88ccff;
+    }
+  </style>
+</head>
+<body>
+  <div id="cesiumContainer"></div>
+
+  <div id="info-panel">
+    <h3>SASS Geo-Viewer</h3>
+    <div id="fps">FPS: --</div>
+    <div id="point-count">Points: --</div>
+  </div>
+
+  <script src="./dist/bundle.js"></script>
+</body>
+</html>

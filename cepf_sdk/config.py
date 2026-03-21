@@ -22,6 +22,8 @@ class SensorConfig:
     max_range_m: float = 200.0
     range_resolution_m: float = 0.1
     velocity_resolution_mps: float = 0.1
+    axis_sign: dict = field(default_factory=lambda: {"x": 1, "y": 1, "z": 1})
+    """軸符号変換設定。x/y/z それぞれ 1 (正方向維持) または -1 (符号反転)。"""
 
 
 @dataclass

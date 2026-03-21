@@ -14,6 +14,46 @@ body {
   height: 100vh;
 }
 
+/* ── スプリットモード (voxel_mode: "both") ── */
+#viewer-split {
+  display: none; /* JS が body.split-mode で切り替える */
+  width: 100vw;
+  height: 100vh;
+}
+
+body.split-mode #viewer-container {
+  display: none;
+}
+
+body.split-mode #viewer-split {
+  display: flex;
+}
+
+.viewer-pane {
+  flex: 1;
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+}
+
+#viewer-left {
+  border-right: 2px solid #333;
+}
+
+.pane-label {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 50;
+  background: rgba(0, 0, 0, 0.6);
+  color: #0af;
+  font-family: monospace;
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  pointer-events: none;
+}
+
 #status-bar {
   position: fixed;
   bottom: 8px;

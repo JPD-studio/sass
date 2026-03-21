@@ -8,7 +8,12 @@
     "detector": "node --loader ts-node/esm src/main-detector.ts"
   },
   "devDependencies": {
-    "typescript": "^5.0.0",
-    "@types/node": "^20.0.0"
+    "@types/node": "^20.0.0",
+    "@types/ws": "^8.18.1",
+    "ts-node": "^10.9.0",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "ws": "^8.19.0"
   }
 }
